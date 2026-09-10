@@ -151,9 +151,7 @@ def transcribe(
                 text = (word.word or "").strip()
                 if not text:
                     continue
-                result.words.append(
-                    Word(text=text, start=float(word.start), end=float(word.end))
-                )
+                result.words.append(Word(text=text, start=float(word.start), end=float(word.end)))
 
             # A segment with no word timings still carries text worth keeping for
             # display, but it can't contribute to word-indexed clip boundaries.
