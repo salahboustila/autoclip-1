@@ -124,49 +124,63 @@ def transcribe(
     except Exception as exc:
         raise _model_load_error(exc, device, compute_type) from exc
 
-    segments_iter, info = model.transcribe(
-        str(audio),
-        language=settings.language or None,
-        word_timestamps=True,
-        vad_filter=True,
-        # Trims long silences before decoding, which both speeds things up and
-        # stops Whisper hallucinating text into empty audio.
-        vad_parameters={"min_silence_duration_ms": 500},
-    )
-
-    total = duration_s or getattr(info, "duration", 0.0) or 0.0
-    transcript = Transcript(
-        language=getattr(info, "language", "") or settings.language,
-        model=settings.model,
-        source="whisper",
-    )
-
-    for segment in segments_iter:
-        if cancelled is not None and cancelled():
-            raise TranscriptionError("Transcription cancelled.")
-
-        first_word = len(transcript.words)
-        for word in getattr(segment, "words", None) or []:
-            text = (word.word or "").strip()
-            if not text:
-                continue
-            transcript.words.append(Word(text=text, start=float(word.start), end=float(word.end)))
-
-        # A segment with no word timings still carries text worth keeping for
-        # display, but it can't contribute to word-indexed clip boundaries.
-        last_word = max(first_word, len(transcript.words) - 1)
-        transcript.segments.append(
-            Segment(
-                text=(segment.text or "").strip(),
-                start=float(segment.start),
-                end=float(segment.end),
-                first_word=first_word,
-                last_word=last_word,
-            )
+    def _run(vad_filter: bool) -> Transcript:
+        segments_iter, info = model.transcribe(
+            str(audio),
+            language=settings.language or None,
+            word_timestamps=True,
+            vad_filter=vad_filter,
+            # Trims long silences before decoding, which both speeds things up
+            # and stops Whisper hallucinating text into empty audio.
+            vad_parameters={"min_silence_duration_ms": 500} if vad_filter else None,
         )
 
-        if on_progress and total:
-            on_progress(min(1.0, float(segment.end) / total))
+        total = duration_s or getattr(info, "duration", 0.0) or 0.0
+        result = Transcript(
+            language=getattr(info, "language", "") or settings.language,
+            model=settings.model,
+            source="whisper",
+        )
+
+        for segment in segments_iter:
+            if cancelled is not None and cancelled():
+                raise TranscriptionError("Transcription cancelled.")
+
+            first_word = len(result.words)
+            for word in getattr(segment, "words", None) or []:
+                text = (word.word or "").strip()
+                if not text:
+                    continue
+                result.words.append(
+                    Word(text=text, start=float(word.start), end=float(word.end))
+                )
+
+            # A segment with no word timings still carries text worth keeping for
+            # display, but it can't contribute to word-indexed clip boundaries.
+            last_word = max(first_word, len(result.words) - 1)
+            result.segments.append(
+                Segment(
+                    text=(segment.text or "").strip(),
+                    start=float(segment.start),
+                    end=float(segment.end),
+                    first_word=first_word,
+                    last_word=last_word,
+                )
+            )
+
+            if on_progress and total:
+                on_progress(min(1.0, float(segment.end) / total))
+
+        return result
+
+    transcript = _run(vad_filter=True)
+
+    if not transcript.words:
+        # Silero VAD sometimes classifies a whole track as non-speech — a music
+        # bed under the voice, heavy compression, an unusual mic. A no-VAD pass
+        # recovers the speech rather than failing a job that genuinely has some.
+        log.warning("VAD filtering left no speech; retrying transcription without it.")
+        transcript = _run(vad_filter=False)
 
     if not transcript.words:
         raise TranscriptionError(
