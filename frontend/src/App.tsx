@@ -18,22 +18,26 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-ink-900">
-      <header className="border-b border-ink-800">
-        <div className="mx-auto flex max-w-[1600px] items-baseline gap-8 px-6 py-4 lg:px-10">
-          <NavLink to="/" className="group flex items-baseline gap-2.5">
-            <span className="font-display text-2xl leading-none text-ink-100">
-              Auto<span className="italic text-sodium-500">Clip</span>
+      <header className="sticky top-0 z-20 border-b border-ink-800 bg-ink-900/85 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1600px] items-center gap-8 px-6 py-3.5 lg:px-10">
+          <NavLink to="/" className="flex items-center gap-2.5">
+            <span
+              aria-hidden
+              className="grid size-7 place-items-center rounded-lg bg-mint-500 text-[0.9rem] font-bold text-white"
+            >
+              ✦
             </span>
+            <span className="headline text-lg text-ink-100">AutoClip</span>
           </NavLink>
 
-          <nav className="flex items-baseline gap-6">
+          <nav className="flex items-center gap-1">
             <TopLink to="/" end>
               New
             </TopLink>
             <TopLink to="/settings">Settings</TopLink>
           </nav>
 
-          <div className="ml-auto flex items-baseline gap-5">
+          <div className="ml-auto flex items-center gap-5">
             {system && <SystemBadge system={system} />}
           </div>
         </div>
@@ -61,8 +65,10 @@ function TopLink({
       end={end}
       className={({ isActive }) =>
         [
-          'text-sm font-medium transition-colors duration-200',
-          isActive ? 'text-sodium-500' : 'text-ink-400 hover:text-ink-200',
+          'rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors duration-200',
+          isActive
+            ? 'bg-ink-850 text-ink-100'
+            : 'text-ink-400 hover:bg-ink-850 hover:text-ink-200',
         ].join(' ')
       }
     >
@@ -81,17 +87,27 @@ function TopLink({
 function SystemBadge({ system }: { system: SystemStatus }) {
   const accel = system.accel.toUpperCase()
   return (
-    <div className="hidden items-baseline gap-4 text-xs md:flex">
-      <span className="numeric text-ink-400">
+    <div className="hidden items-center gap-2.5 text-xs md:flex">
+      <span className="numeric rounded-full bg-ink-850 px-2.5 py-1 text-ink-400">
         {accel}
         {system.gpu_name && accel === 'CUDA' && (
           <span className="text-ink-600"> · {system.gpu_name.replace('NVIDIA GeForce ', '')}</span>
         )}
       </span>
       <span
-        className={system.ready ? 'text-ink-400' : 'text-signal-bad'}
+        className={[
+          'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium',
+          system.ready ? 'bg-mint-300/35 text-signal-good' : 'bg-signal-bad/12 text-signal-bad',
+        ].join(' ')}
         title={system.ready ? 'All required components present' : 'Run autoclip doctor'}
       >
+        <span
+          aria-hidden
+          className={[
+            'size-1.5 rounded-full',
+            system.ready ? 'bg-signal-good' : 'bg-signal-bad',
+          ].join(' ')}
+        />
         {system.ready ? 'ready' : 'not ready'}
       </span>
     </div>

@@ -205,7 +205,7 @@ def encoder_args(settings: ExportSettings) -> list[str]:
         "-c:v",
         "libx264",
         "-preset",
-        "medium",
+        settings.x264_preset,
         "-crf",
         str(settings.crf),
         "-profile:v",

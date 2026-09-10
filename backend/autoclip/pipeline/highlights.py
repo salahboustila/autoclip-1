@@ -140,6 +140,8 @@ async def detect(
     completed = 0
     lock = asyncio.Lock()
 
+    failures: list[str] = []
+
     async def run_window(window: TranscriptWindow) -> list[ClipCandidate]:
         nonlocal completed
         async with semaphore:
@@ -154,6 +156,7 @@ async def detect(
                     window.last_word,
                     exc,
                 )
+                failures.append(str(exc))
                 candidates = []
             async with lock:
                 completed += 1
@@ -165,6 +168,16 @@ async def detect(
     candidates = [c for group in results for c in group]
 
     if not candidates:
+        # Distinguish "the model looked and found nothing" from "the model was
+        # never reached". Blaming the transcript for a failed network call sends
+        # people off re-encoding video to fix their DNS.
+        if len(failures) == len(windows):
+            raise HighlightError(
+                f"Every request to {provider.name} failed, so no clips could be "
+                f"chosen. This is a provider or connection problem, not a "
+                f"judgement about the video — retry the job.\n\n"
+                f"First error: {failures[0]}"
+            )
         raise HighlightError(
             "No clips were found. This can mean the video genuinely has no "
             "self-contained highlights, or that the model struggled with the "

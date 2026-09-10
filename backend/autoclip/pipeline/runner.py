@@ -184,6 +184,14 @@ class PipelineRunner:
             store.update_job(self.job.id, status="cancelled", finished_at=utcnow(), progress=0.0)
             raise
         except Exception as exc:
+            # A stage may surface a cancellation as its own error type (transcribe
+            # raises TranscriptionError mid-pass). Check the flag rather than the
+            # message so the job is recorded as cancelled, not failed.
+            if self._is_cancelled():
+                store.update_job(
+                    self.job.id, status="cancelled", finished_at=utcnow(), progress=0.0
+                )
+                raise JobCancelled("Job cancelled.") from exc
             log.exception("Job %s failed.", self.job.id)
             store.update_job(self.job.id, status="failed", error=str(exc), finished_at=utcnow())
             raise

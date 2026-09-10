@@ -15,12 +15,20 @@ that starts at the wrong moment.
 JSON often enough that a single retry carrying the actual validation message
 turns most failures into successes. That loop lives here so every provider
 inherits it.
+
+**Retry transient failures, surface settled ones.** A dropped DNS lookup or a
+momentary 503 from a hosted model is not a verdict about the video, but without
+a backoff it loses the window — and if every window loses, the job dies with a
+message blaming the transcript. Transient failures are retried here; anything
+settled (bad key, no credit, unknown model) is raised immediately.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import random
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -32,6 +40,46 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 log = logging.getLogger(__name__)
 
 PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
+
+#: Failures worth retrying: the request never reached a model, or the model was
+#: momentarily unavailable. Everything else fails identically on a second
+#: attempt, so retrying only makes the user wait longer for the same error.
+#:
+#: Matched against the provider's translated message, which preserves the
+#: original text for anything it does not specifically recognise.
+TRANSIENT_MARKERS = (
+    "429",
+    "500",
+    "502",
+    "503",
+    "504",
+    "unavailable",
+    "overloaded",
+    "high demand",
+    "rate limit",
+    "resource_exhausted",
+    "deadline",
+    "timeout",
+    "timed out",
+    "getaddrinfo",  # DNS lookup failed — the machine briefly lost its resolver.
+    "connection reset",
+    "connection aborted",
+    "connection error",
+    "temporarily",
+    "try again",
+)
+
+#: Four attempts spread over roughly 2s + 4s + 8s. Long enough to ride out a
+#: demand spike or a dropped resolver; short enough that a real outage still
+#: fails the window in under a minute.
+MAX_ATTEMPTS = 4
+BASE_RETRY_DELAY_S = 2.0
+
+
+def is_transient(exc: BaseException) -> bool:
+    """Whether ``exc`` looks like a blip rather than a settled refusal."""
+    text = str(exc).lower()
+    return any(marker in text for marker in TRANSIENT_MARKERS)
 
 
 class ProviderError(RuntimeError):
@@ -156,18 +204,46 @@ class LLMProvider(ABC):
 
     # -- shared behaviour --------------------------------------------------
 
+    async def _complete_resilient(
+        self, system: str, user: str, config: DetectionConfig
+    ) -> str:
+        """``_complete`` with exponential backoff over transient failures.
+
+        Jitter is added so concurrent windows that all hit the same demand spike
+        do not retry in lockstep and recreate it.
+        """
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                return await self._complete(system, user, config)
+            except Exception as exc:
+                if attempt == MAX_ATTEMPTS or not is_transient(exc):
+                    raise
+                delay = BASE_RETRY_DELAY_S * 2 ** (attempt - 1) + random.uniform(0, 0.75)
+                log.warning(
+                    "%s: transient failure (attempt %d/%d), retrying in %.1fs — %s",
+                    self.name,
+                    attempt,
+                    MAX_ATTEMPTS,
+                    delay,
+                    exc,
+                )
+                await asyncio.sleep(delay)
+
+        raise AssertionError("unreachable")  # pragma: no cover
+
     async def detect_highlights(
         self, window: TranscriptWindow, config: DetectionConfig
     ) -> ClipCandidates:
         """Ask the model for clip candidates in ``window``, validating the reply.
 
         One retry is attempted on a schema violation, feeding the validation
-        error back so the model can correct itself.
+        error back so the model can correct itself. Transport failures are
+        retried separately, in :meth:`_complete_resilient`.
         """
         system = load_prompt(config.prompt_version)
         user = render_window_prompt(window, config)
 
-        raw = await self._complete(system, user, config)
+        raw = await self._complete_resilient(system, user, config)
         try:
             return self._parse(raw, window)
         except (ValidationError, ValueError) as first_error:
@@ -179,7 +255,7 @@ class LLMProvider(ABC):
                 "Respond again with ONLY the corrected JSON object. No prose, no "
                 "markdown fences."
             )
-            raw = await self._complete(system, repair, config)
+            raw = await self._complete_resilient(system, repair, config)
             try:
                 return self._parse(raw, window)
             except (ValidationError, ValueError) as second_error:

@@ -1,14 +1,33 @@
 @import 'tailwindcss';
 
 /* --------------------------------------------------------------------------
-   AutoClip — darkroom edit-suite
+   AutoClip — daylight studio
 
-   The room this tool lives in is a darkroom: warm charcoal, one sodium-vapour
-   accent, hairline rules instead of cards. Neutrals are tinted toward the
-   accent hue (55°) rather than the usual blue-black, which is what stops it
-   reading as a generic dark dashboard.
+   Light, high-contrast chrome with a single mint accent; the tool gets out of
+   the way and the clips are the only saturated thing on screen.
+
+   Two surfaces, deliberately:
+     - Page chrome (home, progress, settings) is light. It is a form, and forms
+       read better on paper.
+     - Anything showing video wears `.stage`, which flips the same tokens back
+       to dark. Judging a crop or a caption against a white page is a lie —
+       the clip will never be seen that way.
+
+   The ink scale runs 900 (furthest from the text) → 100 (the text itself), so
+   `.stage` can invert lightness without any component knowing it happened.
    -------------------------------------------------------------------------- */
 
+@font-face {
+  font-family: 'Archivo';
+  src: url('./fonts/Archivo-Variable.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Kept available as --font-serif. Nothing references it by default, so the file
+   is never fetched; it is here so the accent can be reintroduced cheaply. */
 @font-face {
   font-family: 'Instrument Serif';
   src: url('./fonts/InstrumentSerif-Regular.ttf') format('truetype');
@@ -25,39 +44,50 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: 'Archivo';
-  src: url('./fonts/Archivo-Variable.ttf') format('truetype-variations');
-  font-weight: 100 900;
-  font-stretch: 62% 125%;
-  font-style: normal;
-  font-display: swap;
-}
-
 @theme {
-  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-display: 'Archivo', ui-sans-serif, system-ui, sans-serif;
   --font-sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Instrument Serif', Georgia, serif;
 
-  /* Warm charcoals. Never pure black — nothing in a real room is. */
-  --color-ink-900: oklch(0.145 0.011 55);
-  --color-ink-850: oklch(0.175 0.012 55);
-  --color-ink-800: oklch(0.208 0.013 55);
-  --color-ink-700: oklch(0.262 0.014 55);
-  --color-ink-600: oklch(0.335 0.014 55);
-  --color-ink-400: oklch(0.545 0.013 58);
-  --color-ink-300: oklch(0.678 0.012 60);
-  --color-ink-200: oklch(0.812 0.010 62);
-  --color-ink-100: oklch(0.935 0.008 65);
+  /* Neutrals, barely cooled (250°) so white reads as paper and not as a screen.
+     900 is the page; 100 is the text. `.stage` reverses the lightness ramp. */
+  --color-ink-900: oklch(0.983 0.002 250);
+  --color-ink-850: oklch(0.962 0.003 250);
+  --color-ink-800: oklch(0.921 0.004 250);
+  --color-ink-700: oklch(0.868 0.005 250);
+  --color-ink-600: oklch(0.742 0.008 250);
+  /* Was missing entirely before this rewrite: 25 `text-ink-500` usages across
+     the app generated no utility at all and silently inherited body colour. */
+  --color-ink-500: oklch(0.615 0.010 250);
+  --color-ink-400: oklch(0.532 0.011 250);
+  --color-ink-300: oklch(0.438 0.012 250);
+  --color-ink-200: oklch(0.322 0.013 252);
+  --color-ink-100: oklch(0.196 0.014 254);
 
-  /* Sodium vapour. One accent, used sparingly, never as a gradient. */
-  --color-sodium-400: oklch(0.845 0.132 68);
-  --color-sodium-500: oklch(0.762 0.168 55);
-  --color-sodium-600: oklch(0.648 0.164 46);
-  --color-sodium-700: oklch(0.512 0.135 44);
+  /* Raised surfaces — white cards on an off-white page. */
+  --color-surface: oklch(1 0 0);
+  --color-surface-sunken: oklch(0.958 0.003 250);
 
-  /* Two functional hues, deliberately desaturated so the accent stays loudest. */
-  --color-signal-good: oklch(0.735 0.108 158);
-  --color-signal-bad: oklch(0.635 0.158 28);
+  /* Mint. One accent, and the only saturated thing in the chrome. 600 is the
+     button fill: dark enough to carry white text at AA. */
+  --color-mint-300: oklch(0.885 0.098 168);
+  --color-mint-400: oklch(0.812 0.136 166);
+  --color-mint-500: oklch(0.742 0.158 164);
+  --color-mint-600: oklch(0.668 0.152 162);
+  --color-mint-700: oklch(0.560 0.128 161);
+
+  /* Aliased so existing `sodium-*` markup keeps working while it is migrated.
+     Same values as mint — not a second accent. */
+  --color-sodium-400: oklch(0.812 0.136 166);
+  --color-sodium-500: oklch(0.668 0.152 162);
+  --color-sodium-600: oklch(0.560 0.128 161);
+  --color-sodium-700: oklch(0.470 0.104 161);
+
+  --color-signal-good: oklch(0.598 0.132 158);
+  --color-signal-bad: oklch(0.578 0.198 27);
+
+  --radius-field: 0.75rem;
+  --radius-card: 1rem;
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
@@ -66,7 +96,7 @@
 @layer base {
   html {
     background: var(--color-ink-900);
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   body {
@@ -80,15 +110,14 @@
   }
 
   ::selection {
-    background: var(--color-sodium-500);
-    color: var(--color-ink-900);
+    background: var(--color-mint-300);
+    color: var(--color-ink-100);
   }
 
-  /* One visible focus treatment everywhere, so keyboard use never guesses. */
   :focus-visible {
-    outline: 2px solid var(--color-sodium-500);
+    outline: 2px solid var(--color-mint-600);
     outline-offset: 2px;
-    border-radius: 1px;
+    border-radius: 3px;
   }
 
   ::-webkit-scrollbar {
@@ -96,7 +125,7 @@
     height: 10px;
   }
   ::-webkit-scrollbar-track {
-    background: var(--color-ink-900);
+    background: transparent;
   }
   ::-webkit-scrollbar-thumb {
     background: var(--color-ink-700);
@@ -109,32 +138,71 @@
 }
 
 @layer components {
+  /* ----------------------------------------------------------------------
+     The dark half. Redefining the tokens on a container re-points every
+     `bg-ink-*` / `text-ink-*` utility inside it, so review screens go dark
+     without a single component branching on theme.
+     ---------------------------------------------------------------------- */
+  .stage {
+    --color-ink-900: oklch(0.152 0.008 252);
+    --color-ink-850: oklch(0.192 0.009 252);
+    --color-ink-800: oklch(0.245 0.010 252);
+    --color-ink-700: oklch(0.312 0.011 252);
+    --color-ink-600: oklch(0.412 0.012 252);
+    --color-ink-500: oklch(0.512 0.012 252);
+    --color-ink-400: oklch(0.612 0.011 252);
+    --color-ink-300: oklch(0.722 0.010 252);
+    --color-ink-200: oklch(0.848 0.008 252);
+    --color-ink-100: oklch(0.962 0.004 252);
+    --color-surface: oklch(0.192 0.009 252);
+    --color-surface-sunken: oklch(0.128 0.008 252);
+    --color-signal-good: oklch(0.735 0.108 158);
+    --color-signal-bad: oklch(0.660 0.165 28);
+
+    color-scheme: dark;
+    background: var(--color-ink-900);
+    color: var(--color-ink-100);
+  }
+
   /* Numerals that hold their column: scores, durations, timecode. */
   .numeric {
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum' 1;
   }
 
-  /* The masthead label — small, wide-tracked, sits above a rule. */
   .eyebrow {
     font-size: 0.6875rem;
     font-weight: 600;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--color-ink-400);
+  }
+
+  /* Display type: heavy and tight. Archivo's variable axes do the work, so no
+     second family is needed for the headline. */
+  .headline {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 0.98;
   }
 
   .rule {
     border-color: var(--color-ink-800);
   }
 
-  /* Text input as a ruled line, not a box. Boxes everywhere is the tell of a
-     template; a ruled field reads like a form on paper. */
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-ink-800);
+    border-radius: var(--radius-card);
+  }
+
+  /* Compact ruled field — still the right shape for dense option grids. */
   .field {
     background: transparent;
     border: 0;
     border-bottom: 1px solid var(--color-ink-700);
-    padding: 0.625rem 0.125rem;
+    padding: 0.5rem 0.125rem;
     color: var(--color-ink-100);
     width: 100%;
     transition: border-color 220ms var(--ease-out-quart);
@@ -144,7 +212,45 @@
   }
   .field:focus {
     outline: none;
-    border-bottom-color: var(--color-sodium-500);
+    border-bottom-color: var(--color-mint-600);
+  }
+
+  /* The hero input: one raised pill holding the field and its button. */
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-ink-800);
+    border-radius: 999px;
+    padding: 0.4375rem 0.4375rem 0.4375rem 1.375rem;
+    box-shadow:
+      0 1px 2px oklch(0 0 0 / 0.04),
+      0 12px 32px -16px oklch(0 0 0 / 0.18);
+    transition:
+      border-color 220ms var(--ease-out-quart),
+      box-shadow 220ms var(--ease-out-quart);
+  }
+  .pill:focus-within {
+    border-color: var(--color-mint-500);
+    box-shadow:
+      0 0 0 4px oklch(0.742 0.158 164 / 0.16),
+      0 12px 32px -16px oklch(0 0 0 / 0.18);
+  }
+  .pill input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    color: var(--color-ink-100);
+    font-size: 0.9375rem;
+    padding: 0.5rem 0;
+  }
+  .pill input::placeholder {
+    color: var(--color-ink-600);
+  }
+  .pill input:focus {
+    outline: none;
   }
 
   .btn {
@@ -155,7 +261,8 @@
     font-weight: 600;
     font-size: 0.8125rem;
     letter-spacing: 0.01em;
-    padding: 0.5rem 1rem;
+    padding: 0.5rem 1.125rem;
+    border-radius: 999px;
     transition:
       background-color 180ms var(--ease-out-quart),
       color 180ms var(--ease-out-quart),
@@ -166,16 +273,16 @@
     transform: translateY(1px);
   }
   .btn:disabled {
-    opacity: 0.4;
+    opacity: 0.45;
     cursor: not-allowed;
   }
 
   .btn-primary {
-    background: var(--color-sodium-500);
-    color: var(--color-ink-900);
+    background: var(--color-mint-600);
+    color: oklch(1 0 0);
   }
   .btn-primary:hover:not(:disabled) {
-    background: var(--color-sodium-400);
+    background: var(--color-mint-700);
   }
 
   .btn-ghost {
@@ -191,10 +298,10 @@
   .btn-quiet {
     background: transparent;
     color: var(--color-ink-400);
-    padding-inline: 0.25rem;
+    padding-inline: 0.5rem;
   }
   .btn-quiet:hover:not(:disabled) {
-    color: var(--color-sodium-400);
+    color: var(--color-mint-700);
   }
 }
 

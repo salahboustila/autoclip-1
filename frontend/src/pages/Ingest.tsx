@@ -56,117 +56,130 @@ export function Ingest() {
   const usableProvider = providers.find((p) => p.available)
 
   return (
-    <div className="pt-14">
-      {/* Masthead. Left-aligned and asymmetric — the field is the subject, not
-          a centred hero card. */}
-      <div className="rise max-w-3xl">
-        <p className="eyebrow">Local · No accounts · No watermarks</p>
-        <h1 className="mt-5 font-display text-[clamp(2.75rem,7vw,5.5rem)] leading-[0.95] text-ink-100">
-          Long video in.
-          <br />
-          <span className="italic text-sodium-500">Shorts</span> out.
+    <div className="pt-16 sm:pt-24">
+      {/* Centred hero: the field is the one thing to do on this screen, so
+          everything above it exists only to point at it. */}
+      <div className="rise mx-auto max-w-3xl text-center">
+        <h1 className="headline text-[clamp(2.5rem,6.5vw,4.75rem)] text-ink-100">
+          Long video in. <span className="text-mint-600">Shorts</span> out.
         </h1>
+        <p className="mx-auto mt-5 max-w-xl text-[1.0625rem] leading-relaxed text-ink-400">
+          Paste a link or drop a file. AutoClip finds the moments worth cutting,
+          reframes them vertical, and burns in captions.
+        </p>
       </div>
 
-      <div className="mt-16 grid gap-x-16 gap-y-12 lg:grid-cols-[1.35fr_1fr]">
-        {/* URL */}
-        <section className="rise" style={{ animationDelay: '90ms' }}>
-          <form onSubmit={submitUrl}>
-            <label htmlFor="url" className="eyebrow">
-              Paste a link
-            </label>
-            <div className="mt-3 flex items-end gap-4">
-              <input
-                id="url"
-                className="field font-display text-xl md:text-2xl"
-                placeholder="https://youtube.com/watch?v=…"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                autoComplete="off"
-                spellCheck={false}
-                disabled={busy !== null}
-              />
-              <button
-                type="submit"
-                className="btn btn-primary shrink-0"
-                disabled={busy !== null || !url.trim()}
-              >
-                {busy === 'url' ? 'Fetching…' : 'Start'}
-              </button>
-            </div>
-          </form>
-
-          <p className="mt-3 text-xs leading-relaxed text-ink-500">
-            Only download video you own or have the rights to process.
-          </p>
-
-          <AdvancedOptions
-            open={advancedOpen}
-            onToggle={() => setAdvancedOpen((v) => !v)}
-            overrides={overrides}
-            onChange={setOverrides}
-            providers={providers}
-          />
-        </section>
-
-        {/* Upload */}
-        <section className="rise" style={{ animationDelay: '160ms' }}>
-          <p className="eyebrow">Or drop a file</p>
-          <div
-            onDragOver={(e) => {
-              e.preventDefault()
-              setDragging(true)
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setDragging(false)
-              const file = e.dataTransfer.files[0]
-              if (file) submitFile(file)
-            }}
-            className={[
-              'mt-3 flex min-h-52 cursor-pointer flex-col items-center justify-center gap-2 border border-dashed px-6 text-center transition-colors duration-200',
-              dragging
-                ? 'border-sodium-500 bg-sodium-700/10'
-                : 'border-ink-700 hover:border-ink-600',
-            ].join(' ')}
-            onClick={() => fileInput.current?.click()}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') fileInput.current?.click()
-            }}
-          >
-            <span className="font-display text-2xl text-ink-200">
-              {busy === 'file' ? 'Uploading…' : 'Drop video or audio'}
+      {/* URL */}
+      <section className="rise mx-auto mt-10 max-w-2xl" style={{ animationDelay: '90ms' }}>
+        <form onSubmit={submitUrl}>
+          <label htmlFor="url" className="sr-only">
+            Paste a link
+          </label>
+          <div className="pill">
+            <span aria-hidden className="text-base text-ink-600">
+              ⌘
             </span>
-            <span className="text-xs text-ink-500">mp4 · mov · mkv · webm · mp3 · wav · m4a</span>
+            <input
+              id="url"
+              placeholder="Paste a YouTube link…"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              disabled={busy !== null}
+            />
+            <button
+              type="submit"
+              className="btn btn-primary shrink-0"
+              disabled={busy !== null || !url.trim()}
+            >
+              {busy === 'url' ? 'Fetching…' : 'Make clips'}
+            </button>
           </div>
-          <input
-            ref={fileInput}
-            type="file"
-            className="hidden"
-            accept="video/*,audio/*"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) submitFile(file)
-              e.target.value = ''
-            }}
-          />
-        </section>
-      </div>
+        </form>
+
+        <p className="mt-3.5 flex items-center justify-center gap-1.5 text-center text-xs text-ink-500">
+          <span aria-hidden className="text-mint-600">
+            ✓
+          </span>
+          Runs entirely on your machine — no account, no upload, no watermark
+        </p>
+
+        <AdvancedOptions
+          open={advancedOpen}
+          onToggle={() => setAdvancedOpen((v) => !v)}
+          overrides={overrides}
+          onChange={setOverrides}
+          providers={providers}
+        />
+      </section>
+
+      {/* Upload */}
+      <section className="rise mx-auto mt-10 max-w-2xl" style={{ animationDelay: '160ms' }}>
+        <div className="flex items-center gap-4">
+          <span className="h-px flex-1 bg-ink-800" />
+          <span className="eyebrow">or</span>
+          <span className="h-px flex-1 bg-ink-800" />
+        </div>
+
+        <div
+          onDragOver={(e) => {
+            e.preventDefault()
+            setDragging(true)
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setDragging(false)
+            const file = e.dataTransfer.files[0]
+            if (file) submitFile(file)
+          }}
+          className={[
+            'mt-5 flex min-h-40 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-[var(--radius-card)] border border-dashed px-6 text-center transition-colors duration-200',
+            dragging
+              ? 'border-mint-500 bg-mint-300/25'
+              : 'border-ink-700 bg-surface hover:border-mint-500 hover:bg-ink-850',
+          ].join(' ')}
+          onClick={() => fileInput.current?.click()}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') fileInput.current?.click()
+          }}
+        >
+          <span className="text-base font-semibold text-ink-200">
+            {busy === 'file' ? 'Uploading…' : 'Drop a video or audio file'}
+          </span>
+          <span className="text-xs text-ink-500">mp4 · mov · mkv · webm · mp3 · wav · m4a</span>
+        </div>
+        <input
+          ref={fileInput}
+          type="file"
+          className="hidden"
+          accept="video/*,audio/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) submitFile(file)
+            e.target.value = ''
+          }}
+        />
+
+        <p className="mt-4 text-center text-xs leading-relaxed text-ink-500">
+          Only process video you own or have the rights to.
+        </p>
+      </section>
 
       {error && (
-        <div className="mt-10 max-w-3xl">
+        <div className="mx-auto mt-10 max-w-2xl">
           <ErrorNote error={error} onDismiss={() => setError(null)} />
         </div>
       )}
 
       {providers.length > 0 && !usableProvider && (
-        <p className="mt-10 max-w-3xl border-l-2 border-sodium-600 pl-4 text-sm text-ink-300">
+        <p className="mx-auto mt-10 max-w-2xl rounded-[var(--radius-field)] border border-ink-800 bg-surface px-4 py-3 text-sm text-ink-300">
           No AI provider is reachable yet, so clip selection will fail. Add an API key or
           start Ollama in{' '}
-          <a href="/settings" className="text-sodium-500 underline underline-offset-4">
+          <a href="/settings" className="font-medium text-mint-700 underline underline-offset-4">
             Settings
           </a>
           .

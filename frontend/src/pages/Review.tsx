@@ -150,13 +150,16 @@ export function Review() {
   if (!job) return <p className="pt-24 text-sm text-ink-500">Loading…</p>
 
   return (
-    <div className="pt-10">
+    // `.stage` re-points the ink tokens to their dark values for this subtree.
+    // Judging a crop or a caption against a white page misrepresents how the
+    // clip will actually be seen, so the review screen stays dark.
+    <div className="stage -mx-6 min-h-screen px-6 pt-10 lg:-mx-10 lg:px-10">
       <div className="flex flex-wrap items-baseline justify-between gap-4 border-b border-ink-800 pb-5">
         <div className="min-w-0">
-          <Link to="/" className="eyebrow transition-colors hover:text-sodium-500">
+          <Link to="/" className="eyebrow transition-colors hover:text-mint-400">
             ← All jobs
           </Link>
-          <h1 className="mt-2 max-w-2xl truncate font-display text-[clamp(1.5rem,3vw,2.25rem)] leading-tight text-ink-100">
+          <h1 className="headline mt-2 max-w-2xl truncate text-[clamp(1.5rem,3vw,2.25rem)] text-ink-100">
             {job.source?.title || 'Untitled'}
           </h1>
         </div>
