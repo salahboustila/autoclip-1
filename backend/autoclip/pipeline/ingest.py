@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import re
 import shutil
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -39,6 +40,26 @@ _BOT_CHECK_MARKERS = (
     "this content isn't available",
     "player response",
 )
+
+#: yt-dlp error fragments that mean the request never reached YouTube: the DNS
+#: lookup or the connection itself failed. A Wi-Fi drop or a VPN reconnecting
+#: causes these, so they're worth retrying — and updating yt-dlp won't fix them.
+_NETWORK_MARKERS = (
+    "getaddrinfo failed",
+    "failed to resolve",
+    "name resolution",
+    "timed out",
+    "connection reset",
+    "connection aborted",
+    "connection refused",
+    "network is unreachable",
+    "no route to host",
+)
+
+#: Tries for a download that couldn't connect. The pause between them starts at
+#: NETWORK_RETRY_DELAY_S and doubles: 3 s, then 6 s.
+NETWORK_ATTEMPTS = 3
+NETWORK_RETRY_DELAY_S = 3.0
 
 
 class IngestError(RuntimeError):
@@ -120,15 +141,29 @@ def ingest_youtube(
         options["subtitleslangs"] = ["en.*"]
         options["subtitlesformat"] = "json3"
 
-    try:
-        with yt_dlp.YoutubeDL(options) as ydl:
-            metadata = ydl.extract_info(url, download=True)
-    except yt_dlp.utils.DownloadError as exc:
-        shutil.rmtree(target_dir, ignore_errors=True)
-        raise _translate_ytdlp_error(exc, settings) from exc
-    except Exception as exc:
-        shutil.rmtree(target_dir, ignore_errors=True)
-        raise IngestError(f"Could not download {url}: {exc}") from exc
+    metadata: dict | None = None
+    for attempt in range(1, NETWORK_ATTEMPTS + 1):
+        try:
+            with yt_dlp.YoutubeDL(options) as ydl:
+                metadata = ydl.extract_info(url, download=True)
+            break
+        except yt_dlp.utils.DownloadError as exc:
+            if attempt < NETWORK_ATTEMPTS and _is_network_error(exc):
+                delay = NETWORK_RETRY_DELAY_S * 2 ** (attempt - 1)
+                log.warning(
+                    "Couldn't reach YouTube (attempt %d/%d), retrying in %.0fs: %s",
+                    attempt,
+                    NETWORK_ATTEMPTS,
+                    delay,
+                    exc,
+                )
+                time.sleep(delay)
+                continue
+            shutil.rmtree(target_dir, ignore_errors=True)
+            raise _translate_ytdlp_error(exc, settings) from exc
+        except Exception as exc:
+            shutil.rmtree(target_dir, ignore_errors=True)
+            raise IngestError(f"Could not download {url}: {exc}") from exc
 
     downloaded = _find_downloaded_file(target_dir)
     if downloaded is None:
@@ -154,9 +189,27 @@ def ingest_youtube(
     )
 
 
+def _is_network_error(exc: Exception) -> bool:
+    """Whether a yt-dlp failure is the connection's fault rather than YouTube's."""
+    message = str(exc).lower()
+    return any(marker in message for marker in _NETWORK_MARKERS)
+
+
 def _translate_ytdlp_error(exc: Exception, settings: IngestSettings) -> IngestError:
     """Turn a yt-dlp failure into something the user can act on."""
     message = str(exc).lower()
+
+    if _is_network_error(exc):
+        return IngestError(
+            "Couldn't reach YouTube.",
+            hint=(
+                "This computer couldn't connect to YouTube, or look up its address, even "
+                f"after {NETWORK_ATTEMPTS} tries. That's the internet connection, not the "
+                "video: check the Wi-Fi, or a VPN that is connecting, then try again. "
+                "Updating yt-dlp won't help with this one.\n\n"
+                f"Original error: {exc}"
+            ),
+        )
 
     if any(marker in message for marker in _BOT_CHECK_MARKERS):
         if settings.cookies_from_browser:
