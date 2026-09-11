@@ -142,6 +142,28 @@ class TestComputeTypeOverride:
         assert resolve_compute(self._settings("float16"), gpu) == ("cuda", "float16")
 
 
+class TestOllamaModelCheck:
+    """Doctor used to call Ollama fine whenever it was running, even with the model
+    selected in Settings not pulled — so every Ollama job then failed."""
+
+    @pytest.mark.parametrize(
+        ("model", "pulled", "expected"),
+        [
+            ("qwen3:8b", ["qwen3:8b"], True),
+            ("llama3.1:8b", ["qwen3:8b"], False),
+            # Ollama reads a name with no tag as :latest.
+            ("qwen3", ["qwen3:latest"], True),
+            ("qwen3", ["qwen3:8b"], False),
+        ],
+    )
+    def test_matches_the_way_ollama_resolves_names(
+        self, model: str, pulled: list[str], expected: bool
+    ) -> None:
+        from autoclip.system import has_ollama_model
+
+        assert has_ollama_model(model, pulled) is expected
+
+
 class TestFFmpegUsability:
     def _complete(self, **overrides) -> FFmpegInfo:
         defaults = {

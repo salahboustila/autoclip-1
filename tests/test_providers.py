@@ -205,6 +205,28 @@ class TestRegistry:
 
         assert OllamaProvider.requires_key is False
 
+    async def test_ollama_asks_thinking_models_not_to_think(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Left to think, qwen3 answered JSON mode with an empty clip list, which
+        # the pipeline then reported as "no clips were found".
+        import httpx
+        from autoclip.providers import DetectionConfig, OllamaProvider
+
+        sent: list[dict] = []
+
+        async def fake_post(self, url, *, json, **kwargs):
+            sent.append(json)
+            return httpx.Response(
+                200, json={"response": '{"clips": []}'}, request=httpx.Request("POST", url)
+            )
+
+        monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+        await OllamaProvider("qwen3:8b")._complete("system", "user", DetectionConfig())
+
+        assert sent[0]["think"] is False
+        assert sent[0]["format"] == "json"
+
     def test_unknown_provider_raises(self) -> None:
         from autoclip.providers import build_provider
 

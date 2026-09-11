@@ -204,9 +204,7 @@ class LLMProvider(ABC):
 
     # -- shared behaviour --------------------------------------------------
 
-    async def _complete_resilient(
-        self, system: str, user: str, config: DetectionConfig
-    ) -> str:
+    async def _complete_resilient(self, system: str, user: str, config: DetectionConfig) -> str:
         """``_complete`` with exponential backoff over transient failures.
 
         Jitter is added so concurrent windows that all hit the same demand spike

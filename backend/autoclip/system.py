@@ -362,6 +362,11 @@ def _probe_ollama(base_url: str = "http://localhost:11434") -> tuple[bool, list[
         return False, []
 
 
+def has_ollama_model(model: str, pulled: list[str]) -> bool:
+    """Whether Ollama has ``model`` pulled. A name without a tag means ``:latest``."""
+    return (model if ":" in model else f"{model}:latest") in pulled
+
+
 def _platform_string() -> str:
     """Human-readable OS description.
 

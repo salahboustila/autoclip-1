@@ -10,6 +10,7 @@ Layout::
       media/            source videos, one directory per source id
       work/<job_id>/    stage intermediates (audio, transcript, crop path)
       exports/          finished clips
+      logs/             server.log and crash.log, for when the server stops
       autoclip.db       SQLite database
       config.json       settings (secrets live in the OS keyring)
 """
@@ -68,6 +69,10 @@ def work_dir() -> Path:
 
 def exports_dir() -> Path:
     return root() / "exports"
+
+
+def logs_dir() -> Path:
+    return root() / "logs"
 
 
 DB_NAME = "autoclip.db"

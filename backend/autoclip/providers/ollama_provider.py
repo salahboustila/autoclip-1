@@ -61,6 +61,10 @@ class OllamaProvider(LLMProvider):
             # Ollama's JSON mode constrains decoding to valid JSON, which is the
             # single biggest reliability win for small local models.
             "format": "json",
+            # Left to think, qwen3 answered JSON mode with an empty clip list; with
+            # thinking off, the same prompt returns real clips. Ollama only objects
+            # to `think` on a model that can't think when it's true.
+            "think": False,
             "options": {"temperature": config.temperature},
         }
 

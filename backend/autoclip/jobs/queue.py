@@ -17,6 +17,7 @@ import contextlib
 import logging
 from dataclasses import dataclass
 
+from .. import resilience
 from ..db import store
 from ..db.models import Job
 from ..pipeline.runner import JobCancelled, PipelineRunner
@@ -160,9 +161,11 @@ def _run_blocking(runner: PipelineRunner):
     """Run the pipeline in a worker thread with its own event loop.
 
     The pipeline is overwhelmingly blocking work with one async stage, so it
-    gets a private loop rather than competing for the server's.
+    gets a private loop rather than competing for the server's. The laptop is
+    kept from idling into sleep until it's done.
     """
-    return asyncio.run(runner.run())
+    with resilience.keep_awake():
+        return asyncio.run(runner.run())
 
 
 #: Process-wide queue.

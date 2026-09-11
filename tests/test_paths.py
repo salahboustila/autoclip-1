@@ -115,6 +115,7 @@ def test_all_artifacts_live_under_the_root(autoclip_home: Path) -> None:
         paths.media_dir(),
         paths.work_dir(),
         paths.exports_dir(),
+        paths.logs_dir(),
         paths.db_path(),
         paths.config_path(),
         paths.job_work_dir("job123"),

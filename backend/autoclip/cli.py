@@ -261,12 +261,22 @@ def doctor() -> None:
         )
 
     ollama_active = " [cyan](active)[/cyan]" if settings.active_provider == "ollama" else ""
-    if deps.ollama_running:
-        model_list = ", ".join(deps.ollama_models[:4]) or "no models pulled"
-        prov_table.add_row(f"ollama{ollama_active}", OK, model_list)
-    else:
+    ollama_model = settings.provider("ollama").model
+    if not deps.ollama_running:
         prov_table.add_row(
             f"ollama{ollama_active}", WARN, "not running on localhost:11434 (optional)"
+        )
+    elif ollama_model and system.has_ollama_model(ollama_model, deps.ollama_models):
+        prov_table.add_row(f"ollama{ollama_active}", OK, ollama_model)
+    else:
+        # Ollama being up isn't enough: a job asks for the model set in Settings,
+        # and Ollama rejects every request when that one isn't pulled.
+        have = ", ".join(deps.ollama_models[:4]) or "none"
+        detail = f"{ollama_model} isn't pulled" if ollama_model else "no model selected"
+        prov_table.add_row(f"ollama{ollama_active}", WARN, f"{detail} (have: {have})")
+        remediation.append(
+            "Ollama jobs will fail until the model selected in Settings is one Ollama has "
+            f"pulled (have: {have}). Pull another with [cyan]ollama pull <model>[/cyan]."
         )
 
     if not any(config.get_secret(n, settings) for n in config.KEYED_PROVIDERS) and not (
@@ -638,14 +648,17 @@ def serve(
     ),
 ) -> None:
     """Start the AutoClip web app."""
+    import logging
     import threading
     import webbrowser
 
     import uvicorn
 
-    from . import db
+    from . import db, resilience
     from .app import static_dir
 
+    # First, so that everything after it, a failed start included, is logged.
+    log_config = resilience.prepare_server()
     db.init()
 
     if static_dir() is None:
@@ -674,7 +687,13 @@ def serve(
         port=port,
         reload=reload,
         log_level="info",
+        # prepare_server has already applied this. It's passed on for --reload,
+        # whose worker process starts with no logging set up.
+        log_config=log_config,
     )
+    # Reached after a clean shutdown, Ctrl+C included. A crash or a closed window
+    # never gets here, which is what tells them apart in the log.
+    logging.getLogger(__name__).info("AutoClip server stopped.")
 
 
 @app.command()
