@@ -8,6 +8,7 @@ import {
   type Job,
   type JobSettingsOverrides,
   type ProviderStatus,
+  type Settings as SettingsData,
 } from '../api'
 import { ErrorNote } from '../components/ErrorNote'
 
@@ -102,8 +103,10 @@ export function Ingest() {
           <span aria-hidden className="text-mint-600">
             ✓
           </span>
-          Runs entirely on your machine — no account, no upload, no watermark
+          Runs entirely on your machine — no account, no upload
         </p>
+
+        <WatermarkQuickAdd />
 
         <AdvancedOptions
           open={advancedOpen}
@@ -187,6 +190,142 @@ export function Ingest() {
       )}
 
       <RecentJobs jobs={jobs} />
+    </div>
+  )
+}
+
+/** A one-click way to set an export watermark without leaving this page —
+ * the full position/size/opacity controls still live in Settings, but
+ * uploading here is enough on its own: the endpoint turns the watermark on
+ * as soon as an image is stored. */
+function WatermarkQuickAdd() {
+  const [settings, setSettings] = useState<SettingsData | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    void api
+      .getSettings()
+      .then((loaded) => {
+        setSettings(loaded)
+        setPreviewUrl(loaded.export.watermark.filename ? api.watermarkFileUrl() : null)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const upload = async (file: File) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const updated = await api.uploadWatermark(file)
+      setSettings(updated)
+      setPreviewUrl(api.watermarkFileUrl())
+    } catch (err) {
+      setError(err as Error)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      setSettings(await api.deleteWatermark())
+      setPreviewUrl(null)
+    } catch (err) {
+      setError(err as Error)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const toggleEnabled = async (enabled: boolean) => {
+    if (!settings) return
+    setBusy(true)
+    setError(null)
+    try {
+      setSettings(
+        await api.putSettings({
+          export: { ...settings.export, watermark: { ...settings.export.watermark, enabled } },
+        }),
+      )
+    } catch (err) {
+      setError(err as Error)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!settings) return null
+  const watermark = settings.export.watermark
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-center gap-3">
+        {watermark.filename ? (
+          <div className="flex items-center gap-3 rounded-full border border-ink-800 bg-surface py-1.5 pl-1.5 pr-3.5">
+            <img
+              src={previewUrl ?? undefined}
+              alt="Watermark preview"
+              className="size-7 rounded-full border border-ink-800 bg-ink-900 object-contain"
+            />
+            <label className="flex items-center gap-2 text-xs text-ink-300">
+              <input
+                type="checkbox"
+                checked={watermark.enabled}
+                disabled={busy}
+                onChange={(e) => void toggleEnabled(e.target.checked)}
+                className="size-3.5 accent-sodium-500"
+              />
+              Watermark {watermark.enabled ? 'on' : 'off'}
+            </label>
+            <button
+              type="button"
+              onClick={() => fileInput.current?.click()}
+              disabled={busy}
+              className="text-xs text-ink-500 underline underline-offset-4 hover:text-ink-300"
+            >
+              Replace
+            </button>
+            <button
+              type="button"
+              onClick={() => void remove()}
+              disabled={busy}
+              className="text-xs text-ink-500 underline underline-offset-4 hover:text-ink-300"
+            >
+              Remove
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            disabled={busy}
+            className="flex items-center gap-2 rounded-full border border-dashed border-ink-700 px-4 py-1.5 text-xs text-ink-500 transition-colors duration-200 hover:border-mint-500 hover:text-ink-300"
+          >
+            {busy ? 'Uploading…' : '+ Add a watermark (PNG or JPG)'}
+          </button>
+        )}
+        <input
+          ref={fileInput}
+          type="file"
+          className="hidden"
+          accept="image/png,image/jpeg"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) void upload(file)
+            e.target.value = ''
+          }}
+        />
+      </div>
+      {error && (
+        <div className="mx-auto mt-3 max-w-sm">
+          <ErrorNote error={error} onDismiss={() => setError(null)} />
+        </div>
+      )}
     </div>
   )
 }

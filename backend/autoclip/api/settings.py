@@ -17,7 +17,13 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["settings"])
 
 
-def _settings_out(settings: config.Settings) -> SettingsOut:
+def settings_out(settings: config.Settings) -> SettingsOut:
+    """Build the wire response for a Settings object.
+
+    Not underscore-prefixed: the watermark router reuses it verbatim so an
+    upload or delete can return the same shape ``PUT /api/settings`` does,
+    rather than duplicating the ``keys_present`` lookup.
+    """
     payload = settings.model_dump(mode="json")
     return SettingsOut(
         active_provider=payload["active_provider"],
@@ -36,7 +42,7 @@ def _settings_out(settings: config.Settings) -> SettingsOut:
 
 @router.get("/settings", response_model=SettingsOut)
 async def get_settings() -> SettingsOut:
-    return _settings_out(config.load())
+    return settings_out(config.load())
 
 
 @router.put("/settings", response_model=SettingsOut)
@@ -56,12 +62,26 @@ async def put_settings(payload: SettingsIn) -> SettingsOut:
     for section in ("whisper", "clips", "ingest", "export"):
         if section in updates:
             current = getattr(settings, section)
+            section_updates = updates[section]
+            if section == "export" and "watermark" in section_updates:
+                # `watermark` is itself a nested model, and the dict merge
+                # below only replaces whole top-level keys of `export` — so a
+                # request that sends just e.g. {"position": "top-left"}
+                # without every other watermark field would otherwise reset
+                # the rest to their defaults, silently turning an uploaded,
+                # enabled watermark back off. Merge it against the current
+                # values first, the same way "export" is merged against
+                # `settings` as a whole below.
+                section_updates = {
+                    **section_updates,
+                    "watermark": current.watermark.model_dump() | section_updates["watermark"],
+                }
             try:
                 setattr(
                     settings,
                     section,
-                    current.model_copy(update=updates[section]).model_validate(
-                        current.model_dump() | updates[section]
+                    current.model_copy(update=section_updates).model_validate(
+                        current.model_dump() | section_updates
                     ),
                 )
             except Exception as exc:
@@ -80,7 +100,7 @@ async def put_settings(payload: SettingsIn) -> SettingsOut:
         )
 
     config.save(settings)
-    return _settings_out(settings)
+    return settings_out(settings)
 
 
 @router.put("/settings/secrets", status_code=204)

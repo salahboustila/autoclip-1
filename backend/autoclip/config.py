@@ -82,6 +82,38 @@ class IngestSettings(BaseModel):
     prefer_youtube_captions: bool = False
 
 
+class WatermarkSettings(BaseModel):
+    """Optional logo overlay, burned into every exported clip.
+
+    ``filename`` names the image inside ``paths.watermarks_dir()`` — it is set
+    only by the watermark upload/delete endpoints, never hand-edited, so a
+    partial settings update (e.g. changing just ``position``) can't lose track
+    of which file is active.
+    """
+
+    enabled: bool = False
+    filename: str = ""
+    position: Literal["top-left", "top-right", "bottom-left", "bottom-right", "center"] = (
+        "bottom-right"
+    )
+    #: Watermark width as a percentage of the *output* video's width — not the
+    #: image's own pixel size — so it scales the same in a 1080-wide export as
+    #: it would in a differently sized one.
+    scale_pct: float = Field(default=15.0, gt=0, le=60)
+    opacity_pct: float = Field(default=80.0, ge=0, le=100)
+
+    def resolved_path(self) -> Path | None:
+        """Absolute path to the stored image, or None if none is set.
+
+        Resolved fresh rather than cached, matching :func:`paths.root`'s own
+        contract: an ``AUTOCLIP_HOME`` change between calls (as in tests) takes
+        effect without reloading anything.
+        """
+        if not self.filename:
+            return None
+        return paths.watermarks_dir() / self.filename
+
+
 class ExportSettings(BaseModel):
     ratio: Literal["9:16", "1:1", "16:9"] = "9:16"
     caption_style: str = "bold_pop"
@@ -106,6 +138,7 @@ class ExportSettings(BaseModel):
     ] = "medium"
     #: Also write a .srt sidecar next to each exported clip.
     write_srt: bool = False
+    watermark: WatermarkSettings = Field(default_factory=WatermarkSettings)
 
 
 class Settings(BaseModel):

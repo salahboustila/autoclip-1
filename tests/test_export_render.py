@@ -8,11 +8,13 @@ local build rejects. Marked ``slow`` — they shell out and encode video.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
-from autoclip.config import ExportSettings
+from autoclip import paths
+from autoclip.config import ExportSettings, WatermarkSettings
 from autoclip.pipeline import captions, export, ffmpeg
 from autoclip.pipeline.reframe.croppath import (
     CropKeyframe,
@@ -84,6 +86,51 @@ def words() -> list[Word]:
         Word(text=text, start=2.0 + i * step, end=2.0 + i * step + step * 0.85)
         for i, text in enumerate(texts)
     ]
+
+
+@pytest.fixture(scope="module")
+def watermark_source(tmp_path_factory) -> Path:
+    """A small solid-colour PNG, generated once per session.
+
+    Built with the same ffmpeg-lavfi idiom as `source_video` above, rather
+    than pulling in Pillow or numpy just to make a test fixture — there's
+    otherwise no reason for this suite to need either.
+    """
+    path = tmp_path_factory.mktemp("watermark") / "logo.png"
+    subprocess.run(
+        [
+            ffmpeg.ffmpeg_path(),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=red:s=200x100",
+            "-frames:v",
+            "1",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return path
+
+
+def _watermarked_settings(watermark_source: Path, **overrides) -> ExportSettings:
+    """Copy the fixture image into this test's AUTOCLIP_HOME and enable it.
+
+    A real copy into `paths.watermarks_dir()`, not a mock: `export_clip` reads
+    the watermark straight off disk, so this exercises the same path a real
+    upload would leave behind.
+    """
+    directory = paths.ensure_watermarks_dir()
+    destination = directory / "watermark.png"
+    shutil.copyfile(watermark_source, destination)
+    return ExportSettings(
+        watermark=WatermarkSettings(enabled=True, filename=destination.name, **overrides)
+    )
 
 
 def make_request(source: Path, destination: Path, crop_path: CropPath, words, **kwargs):
@@ -389,28 +436,143 @@ class TestPathsWithSpecialCharacters:
         assert ffmpeg.probe(destination).width == 1080
 
 
+class TestWatermark:
+    def test_visibly_changes_the_output(
+        self, source_video, words, tmp_path, watermark_source
+    ) -> None:
+        plain = tmp_path / "plain.mp4"
+        marked = tmp_path / "marked.mp4"
+
+        export.export_clip(
+            make_request(source_video, plain, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-plain",
+        )
+        export.export_clip(
+            make_request(source_video, marked, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-marked",
+            settings=_watermarked_settings(watermark_source, scale_pct=25.0, opacity_pct=100.0),
+        )
+
+        # Regression: looping the image input (-loop 1) once made the
+        # watermarked render run forever, stretching the clip's last frame.
+        assert ffmpeg.probe(marked).duration_s == pytest.approx(5.0, abs=0.35)
+        assert _frame_signature(plain, 3.0) != _frame_signature(marked, 3.0)
+
+    def test_disabled_renders_exactly_like_no_watermark_at_all(
+        self, source_video, words, tmp_path, watermark_source
+    ) -> None:
+        """A file sitting on disk but the toggle off must be indistinguishable
+        from never having uploaded one — the "no behaviour change" contract."""
+        # Copies the fixture image into place and enables it, then flips it
+        # back off — so the file genuinely exists on disk for this assertion,
+        # not just an absent one that _resolve_watermark would skip anyway.
+        enabled = _watermarked_settings(watermark_source)
+        settings_off = ExportSettings(
+            watermark=enabled.watermark.model_copy(update={"enabled": False})
+        )
+
+        without = tmp_path / "without.mp4"
+        off = tmp_path / "off.mp4"
+        export.export_clip(
+            make_request(source_video, without, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-without",
+        )
+        export.export_clip(
+            make_request(source_video, off, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-off",
+            settings=settings_off,
+        )
+
+        assert _frame_signature(without, 3.0) == _frame_signature(off, 3.0)
+
+    def test_a_missing_file_degrades_to_no_watermark_instead_of_failing(
+        self, source_video, words, tmp_path
+    ) -> None:
+        settings = ExportSettings(watermark=WatermarkSettings(enabled=True, filename="ghost.png"))
+
+        without = tmp_path / "without.mp4"
+        ghost = tmp_path / "ghost.mp4"
+        export.export_clip(
+            make_request(source_video, without, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-without",
+        )
+        export.export_clip(
+            make_request(source_video, ghost, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-ghost",
+            settings=settings,
+        )
+
+        assert _frame_signature(without, 3.0) == _frame_signature(ghost, 3.0)
+
+    def test_position_places_it_in_the_requested_corner(
+        self, source_video, words, tmp_path, watermark_source
+    ) -> None:
+        top_left = tmp_path / "top_left.mp4"
+        bottom_right = tmp_path / "bottom_right.mp4"
+
+        export.export_clip(
+            make_request(source_video, top_left, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-tl",
+            settings=_watermarked_settings(
+                watermark_source, position="top-left", scale_pct=20.0, opacity_pct=100.0
+            ),
+        )
+        export.export_clip(
+            make_request(source_video, bottom_right, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-br",
+            settings=_watermarked_settings(
+                watermark_source, position="bottom-right", scale_pct=20.0, opacity_pct=100.0
+            ),
+        )
+
+        # Same crop window (the top-left 200x200 square) on both renders: it
+        # holds the logo in one and untouched background in the other.
+        top_left_corner = "200:200:0:0"
+        assert _region_signature(top_left, 3.0, top_left_corner) != _region_signature(
+            bottom_right, 3.0, top_left_corner
+        )
+
+    def test_opacity_changes_the_blend(
+        self, source_video, words, tmp_path, watermark_source
+    ) -> None:
+        faint = tmp_path / "faint.mp4"
+        solid = tmp_path / "solid.mp4"
+
+        export.export_clip(
+            make_request(source_video, faint, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-faint",
+            settings=_watermarked_settings(watermark_source, opacity_pct=15.0),
+        )
+        export.export_clip(
+            make_request(source_video, solid, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-solid",
+            settings=_watermarked_settings(watermark_source, opacity_pct=100.0),
+        )
+
+        assert _frame_signature(faint, 3.0) != _frame_signature(solid, 3.0)
+
+
 def _frame_signature(video: Path, timestamp: float) -> str:
     """Hash one frame's pixels, for comparing rendered output."""
-    result = subprocess.run(
-        [
-            ffmpeg.ffmpeg_path(),
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-ss",
-            str(timestamp),
-            "-i",
-            str(video),
-            "-frames:v",
-            "1",
-            "-f",
-            "hash",
-            "-hash",
-            "md5",
-            "-",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    return _region_signature(video, timestamp, crop=None)
+
+
+def _region_signature(video: Path, timestamp: float, crop: str | None) -> str:
+    """Hash one frame's pixels, optionally within an ffmpeg ``crop=w:h:x:y``
+    region — for comparing one corner of a rendered frame against another."""
+    args = [
+        ffmpeg.ffmpeg_path(),
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-ss",
+        str(timestamp),
+        "-i",
+        str(video),
+    ]
+    if crop is not None:
+        args += ["-vf", f"crop={crop}"]
+    args += ["-frames:v", "1", "-f", "hash", "-hash", "md5", "-"]
+
+    result = subprocess.run(args, capture_output=True, text=True, check=True)
     return result.stdout.strip()

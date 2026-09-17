@@ -116,6 +116,7 @@ def test_all_artifacts_live_under_the_root(autoclip_home: Path) -> None:
         paths.work_dir(),
         paths.exports_dir(),
         paths.logs_dir(),
+        paths.watermarks_dir(),
         paths.db_path(),
         paths.config_path(),
         paths.job_work_dir("job123"),
@@ -124,6 +125,21 @@ def test_all_artifacts_live_under_the_root(autoclip_home: Path) -> None:
 
     for path in derived:
         assert root in path.parents
+
+
+def test_watermarks_dir_is_not_created_by_ensure_layout(autoclip_home: Path) -> None:
+    # Lazy on purpose: most installs never upload a watermark, unlike every
+    # other subdirectory here, which every run touches.
+    paths.ensure_layout()
+
+    assert not paths.watermarks_dir().exists()
+
+
+def test_ensure_watermarks_dir_creates_it_on_demand(autoclip_home: Path) -> None:
+    created = paths.ensure_watermarks_dir()
+
+    assert created == paths.watermarks_dir()
+    assert created.is_dir()
 
 
 def test_per_job_and_per_source_directories_are_namespaced(autoclip_home: Path) -> None:

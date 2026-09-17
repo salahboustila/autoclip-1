@@ -146,6 +146,123 @@ class TestSettings:
 
         assert client.get("/api/settings").json()["keys_present"]["openai"] is False
 
+    def test_watermark_rides_along_as_part_of_export_settings(self, client: TestClient) -> None:
+        # No dedicated top-level section: the generic export merge already
+        # covers it, and this is the regression test for that assumption.
+        body = client.get("/api/settings").json()
+        assert body["export"]["watermark"] == {
+            "enabled": False,
+            "filename": "",
+            "position": "bottom-right",
+            "scale_pct": 15.0,
+            "opacity_pct": 80.0,
+        }
+
+        response = client.put(
+            "/api/settings",
+            json={"export": {"watermark": {"position": "top-left", "scale_pct": 22.0}}},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["export"]["watermark"]["position"] == "top-left"
+        assert response.json()["export"]["ratio"] == "9:16"
+
+    def test_a_partial_watermark_update_does_not_reset_the_rest_of_it(
+        self, client: TestClient
+    ) -> None:
+        # Regression test: `export` is merged as a whole dict, and watermark is
+        # a nested object inside it — a naive merge would silently reset
+        # `enabled`/`filename` to their defaults on any update that doesn't
+        # repeat every watermark field, turning an uploaded watermark back off.
+        client.post("/api/watermark", files={"file": ("logo.png", b"bytes", "image/png")})
+
+        response = client.put(
+            "/api/settings", json={"export": {"watermark": {"position": "top-left"}}}
+        )
+
+        watermark = response.json()["export"]["watermark"]
+        assert watermark["position"] == "top-left"
+        assert watermark["enabled"] is True
+        assert watermark["filename"] == "watermark.png"
+        assert watermark["opacity_pct"] == 80.0
+
+
+class TestWatermark:
+    def test_upload_stores_the_image_and_switches_it_on(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/watermark",
+            files={"file": ("logo.png", b"\x89PNG\r\n\x1a\n" + b"fake", "image/png")},
+        )
+
+        assert response.status_code == 201
+        watermark = response.json()["export"]["watermark"]
+        assert watermark["enabled"] is True
+        assert watermark["filename"] == "watermark.png"
+
+    def test_uploaded_file_is_served_back_for_the_preview(self, client: TestClient) -> None:
+        content = b"\x89PNG\r\n\x1a\n" + b"fake-image-bytes"
+        client.post("/api/watermark", files={"file": ("logo.png", content, "image/png")})
+
+        response = client.get("/api/watermark/file")
+
+        assert response.status_code == 200
+        assert response.content == content
+        assert response.headers["content-type"] == "image/png"
+
+    def test_no_file_uploaded_yet_is_a_404(self, client: TestClient) -> None:
+        assert client.get("/api/watermark/file").status_code == 404
+
+    def test_unsupported_type_is_rejected(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/watermark", files={"file": ("logo.gif", b"GIF89a", "image/gif")}
+        )
+
+        assert response.status_code == 415
+        assert "supported" in response.json()["detail"]["message"]
+
+    def test_re_upload_in_a_different_format_replaces_the_old_file(
+        self, client: TestClient
+    ) -> None:
+        client.post("/api/watermark", files={"file": ("logo.png", b"png-bytes", "image/png")})
+        client.post("/api/watermark", files={"file": ("logo.jpg", b"jpg-bytes", "image/jpeg")})
+
+        from autoclip import paths
+
+        remaining = sorted(p.name for p in paths.watermarks_dir().glob("watermark.*"))
+        assert remaining == ["watermark.jpg"]
+        assert client.get("/api/settings").json()["export"]["watermark"]["filename"] == (
+            "watermark.jpg"
+        )
+
+    def test_position_and_opacity_survive_a_re_upload(self, client: TestClient) -> None:
+        client.post("/api/watermark", files={"file": ("logo.png", b"one", "image/png")})
+        client.put("/api/settings", json={"export": {"watermark": {"position": "top-left"}}})
+
+        client.post("/api/watermark", files={"file": ("logo.png", b"two", "image/png")})
+
+        assert client.get("/api/settings").json()["export"]["watermark"]["position"] == ("top-left")
+
+    def test_delete_clears_the_file_and_resets_settings(self, client: TestClient) -> None:
+        client.post("/api/watermark", files={"file": ("logo.png", b"one", "image/png")})
+
+        response = client.delete("/api/watermark")
+
+        assert response.status_code == 200
+        watermark = response.json()["export"]["watermark"]
+        assert watermark == {
+            "enabled": False,
+            "filename": "",
+            "position": "bottom-right",
+            "scale_pct": 15.0,
+            "opacity_pct": 80.0,
+        }
+        assert client.get("/api/watermark/file").status_code == 404
+
+    def test_delete_with_nothing_uploaded_is_a_no_op_not_an_error(self, client: TestClient) -> None:
+        response = client.delete("/api/watermark")
+
+        assert response.status_code == 200
+
 
 class TestSources:
     def test_empty_initially(self, client: TestClient) -> None:

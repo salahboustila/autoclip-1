@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from autoclip import config, paths
+from pydantic import ValidationError
 
 
 def test_defaults_load_without_a_config_file() -> None:
@@ -141,3 +142,53 @@ def test_config_file_is_written_under_autoclip_home(autoclip_home: Path) -> None
 
     assert paths.config_path() == autoclip_home.resolve() / "config.json"
     assert paths.config_path().exists()
+
+
+class TestWatermarkSettings:
+    """Nested inside ExportSettings, not a top-level Settings section — see
+    api/settings.py, whose generic per-section merge already covers it as a
+    result."""
+
+    def test_defaults_are_off(self) -> None:
+        watermark = config.load().export.watermark
+
+        assert watermark.enabled is False
+        assert watermark.filename == ""
+        assert watermark.position == "bottom-right"
+        assert watermark.scale_pct == 15.0
+        assert watermark.opacity_pct == 80.0
+
+    def test_round_trips_through_config_json(self) -> None:
+        settings = config.load()
+        settings.export.watermark = config.WatermarkSettings(
+            enabled=True, filename="watermark.png", position="top-left", scale_pct=25.0
+        )
+        config.save(settings)
+
+        reloaded = config.load().export.watermark
+        assert reloaded.enabled is True
+        assert reloaded.filename == "watermark.png"
+        assert reloaded.position == "top-left"
+        assert reloaded.scale_pct == 25.0
+
+    def test_resolved_path_is_none_with_no_filename(self, autoclip_home: Path) -> None:
+        assert config.WatermarkSettings().resolved_path() is None
+
+    def test_resolved_path_lives_under_the_watermarks_directory(self, autoclip_home: Path) -> None:
+        watermark = config.WatermarkSettings(filename="watermark.png")
+
+        assert watermark.resolved_path() == paths.watermarks_dir() / "watermark.png"
+
+    @pytest.mark.parametrize("scale_pct", [0, -5, 61, 100])
+    def test_scale_outside_2_to_60_percent_is_rejected(self, scale_pct: float) -> None:
+        with pytest.raises(ValidationError):
+            config.WatermarkSettings(scale_pct=scale_pct)
+
+    @pytest.mark.parametrize("opacity_pct", [-1, 101])
+    def test_opacity_outside_0_to_100_percent_is_rejected(self, opacity_pct: float) -> None:
+        with pytest.raises(ValidationError):
+            config.WatermarkSettings(opacity_pct=opacity_pct)
+
+    def test_unknown_position_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            config.WatermarkSettings(position="middle")

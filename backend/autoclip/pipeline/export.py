@@ -1,9 +1,11 @@
-"""Export stage — crop path plus captions plus audio normalisation to an MP4.
+"""Export stage — crop path plus captions plus watermark plus audio
+normalisation to an MP4.
 
 The whole render is a single ffmpeg pass. Per-shot crop segments are trimmed out
 of the source, cropped independently, scaled to a common output size, and
 concatenated in the filtergraph — which is what allows a wide two-shot and a
-tight single to sit in one clip without a mid-stream frame-size change.
+tight single to sit in one clip without a mid-stream frame-size change. A
+watermark, if one is configured, is composited on top of that as a last stage.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..config import ExportSettings
+from ..config import ExportSettings, WatermarkSettings
 from ..system import report
 from . import captions as captions_module
 from . import ffmpeg
@@ -39,6 +41,11 @@ LOUDNESS_RANGE = 11.0
 
 AUDIO_BITRATE = "192k"
 AUDIO_SAMPLE_RATE = 48_000
+
+#: Gap between the watermark and the frame edge, as a fraction of output width.
+#: One number, not a separate horizontal/vertical setting, keeps a corner's two
+#: margins visually equal regardless of aspect ratio.
+WATERMARK_MARGIN_FRACTION = 0.04
 
 
 class ExportError(RuntimeError):
@@ -89,8 +96,16 @@ def build_video_filtergraph(
     *,
     subtitle_name: str | None,
     fonts_name: str = "fonts",
+    watermark: WatermarkSettings | None = None,
 ) -> str:
-    """Build the ``-filter_complex`` video chain for one clip."""
+    """Build the ``-filter_complex`` video chain for one clip.
+
+    ``watermark`` is the already-resolved, already-enabled settings for a
+    watermark whose image file exists — callers pass None for "no watermark",
+    which leaves this function's output identical to before the feature
+    existed. The watermark image itself is expected at input index 1
+    (``[1:v]``); see :func:`export_clip` for the matching ``-i``.
+    """
     out_w, out_h = ratio_dimensions(request.ratio)
     segments = request.crop_path.segments
     if not segments:
@@ -133,14 +148,91 @@ def build_video_filtergraph(
         parts.append(f"{''.join(labels)}concat=n={len(segments)}:v=1:a=0[vcat]")
         current = "[vcat]"
 
+    # The watermark, if any, is composited last — after captions rather than
+    # before — so a logo stays legible over every caption style instead of
+    # being covered by one. That means the caption/passthrough stage's output
+    # label depends on whether there's another stage still to come.
+    base_label = "[vpre]" if watermark is not None else "[vout]"
+
     if request.burn_captions and subtitle_name is not None:
         # Bare relative names — ffmpeg runs with its cwd set to the render
         # workspace, so there is nothing here that needs escaping.
-        parts.append(f"{current}ass=filename={subtitle_name}:fontsdir={fonts_name}[vout]")
+        parts.append(f"{current}ass=filename={subtitle_name}:fontsdir={fonts_name}{base_label}")
     else:
-        parts.append(f"{current}null[vout]")
+        parts.append(f"{current}null{base_label}")
+
+    if watermark is not None:
+        parts.append(_watermark_filtergraph(watermark, out_w))
 
     return ";".join(parts)
+
+
+def _watermark_position_expr(position: str, margin_px: int) -> str:
+    """ffmpeg ``overlay`` x:y expression for a corner or center placement.
+
+    ``W``/``H`` (the base frame) and ``w``/``h`` (the scaled watermark) are
+    resolved by ffmpeg itself from the actual filtered streams, so the margin
+    is the only number this needs computed ahead of time.
+    """
+    try:
+        x_expr, y_expr = {
+            "top-left": (f"{margin_px}", f"{margin_px}"),
+            "top-right": (f"W-w-{margin_px}", f"{margin_px}"),
+            "bottom-left": (f"{margin_px}", f"H-h-{margin_px}"),
+            "bottom-right": (f"W-w-{margin_px}", f"H-h-{margin_px}"),
+            "center": ("(W-w)/2", "(H-h)/2"),
+        }[position]
+    except KeyError:
+        raise ExportError(f"Unknown watermark position {position!r}.") from None
+    return f"{x_expr}:{y_expr}"
+
+
+def _watermark_filtergraph(watermark: WatermarkSettings, out_w: int) -> str:
+    """Scale, fade, and overlay the watermark (input 1) onto ``[vpre]``.
+
+    ``format=rgba`` before the opacity step matters for an opaque JPEG just as
+    much as for a transparent PNG: it gives the frame a full-strength alpha
+    channel to multiply down, which is what turns a solid image translucent.
+    ``-2`` rather than ``-1`` on the scale keeps the intermediate height even,
+    which some builds require even for an RGBA stream that never reaches the
+    encoder directly.
+
+    The image arrives as a single frame. ``eof_action=repeat`` (overlay's
+    default, spelled out because the clip's length depends on it) holds that
+    frame under every frame of the clip, and the output still ends when the
+    clip does. Looping the image input (``-loop 1``) looks equivalent but
+    isn't: the watermark stream then never ends, overlay stretches the clip's
+    last frame to keep pace with it, and the render runs until the disk fills.
+    """
+    wm_width = max(2, round(out_w * watermark.scale_pct / 100))
+    margin_px = round(out_w * WATERMARK_MARGIN_FRACTION)
+    position_expr = _watermark_position_expr(watermark.position, margin_px)
+    opacity = max(0.0, min(1.0, watermark.opacity_pct / 100))
+
+    return (
+        f"[1:v]scale={wm_width}:-2:flags=lanczos,format=rgba,"
+        f"colorchannelmixer=aa={opacity:.3f}[wm];"
+        f"[vpre][wm]overlay={position_expr}:eof_action=repeat,format=yuv420p[vout]"
+    )
+
+
+def _resolve_watermark(watermark: WatermarkSettings) -> Path | None:
+    """The watermark image to composite in, or None if there isn't one to use.
+
+    Covers every way "off" can happen: the setting is disabled, no image was
+    ever uploaded, or the file it points to is gone — a stale setting after a
+    manual delete outside the app shouldn't fail an export that would
+    otherwise succeed.
+    """
+    if not watermark.enabled:
+        return None
+    path = watermark.resolved_path()
+    if path is None:
+        return None
+    if not path.exists():
+        log.warning("Watermark is enabled but %s is missing; exporting without it.", path)
+        return None
+    return path
 
 
 def _fit_chain(source_label: str, index: int, out_w: int, out_h: int) -> list[str]:
@@ -240,6 +332,12 @@ def export_clip(
     workspace = work_dir / request.destination.stem
     workspace.mkdir(parents=True, exist_ok=True)
 
+    # Resolved once here rather than passed straight through: this is the one
+    # place that decides "on, but the file is missing" degrades to "off"
+    # instead of failing the whole export over a stale setting.
+    watermark_path = _resolve_watermark(settings.watermark)
+    watermark = settings.watermark if watermark_path is not None else None
+
     subtitle_name: str | None = None
     fonts_name = "fonts"
     render_cwd: Path | None = None
@@ -258,7 +356,7 @@ def export_clip(
         )
 
     filtergraph = build_video_filtergraph(
-        request, subtitle_name=subtitle_name, fonts_name=fonts_name
+        request, subtitle_name=subtitle_name, fonts_name=fonts_name, watermark=watermark
     )
 
     request.destination.parent.mkdir(parents=True, exist_ok=True)
@@ -274,6 +372,12 @@ def export_clip(
         f"{request.duration_s:.4f}",
         "-i",
         str(request.source),
+    ]
+    if watermark_path is not None:
+        # A plain single-frame input, deliberately not `-loop 1` — see
+        # _watermark_filtergraph for why looping it makes the render endless.
+        args += ["-i", str(watermark_path)]
+    args += [
         "-filter_complex",
         filtergraph,
         "-map",

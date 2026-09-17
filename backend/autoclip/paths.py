@@ -11,6 +11,7 @@ Layout::
       work/<job_id>/    stage intermediates (audio, transcript, crop path)
       exports/          finished clips
       logs/             server.log and crash.log, for when the server stops
+      watermarks/       the uploaded watermark image, if any
       autoclip.db       SQLite database
       config.json       settings (secrets live in the OS keyring)
 """
@@ -75,6 +76,10 @@ def logs_dir() -> Path:
     return root() / "logs"
 
 
+def watermarks_dir() -> Path:
+    return root() / "watermarks"
+
+
 DB_NAME = "autoclip.db"
 LEGACY_DB_NAME = "clipforge.db"
 
@@ -117,3 +122,15 @@ def ensure_layout() -> Path:
     for path in (base, media_dir(), work_dir(), exports_dir()):
         path.mkdir(parents=True, exist_ok=True)
     return base
+
+
+def ensure_watermarks_dir() -> Path:
+    """Create the watermarks directory on demand.
+
+    Not part of :func:`ensure_layout`: every other subdirectory is used on
+    every run, but most installs never upload a watermark, so this is created
+    lazily by the upload endpoint instead.
+    """
+    directory = watermarks_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory

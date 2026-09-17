@@ -129,6 +129,23 @@ export interface ProviderStatus {
   has_key: boolean
 }
 
+export type WatermarkPosition =
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'center'
+
+export interface WatermarkSettings {
+  enabled: boolean
+  /** Set only by uploadWatermark/deleteWatermark — not meant to be hand-edited. */
+  filename: string
+  position: WatermarkPosition
+  /** As a percentage of the exported video's width, so it scales with ratio. */
+  scale_pct: number
+  opacity_pct: number
+}
+
 export interface Settings {
   active_provider: string
   providers: Record<string, { model: string; base_url: string | null }>
@@ -146,6 +163,7 @@ export interface Settings {
     prefer_hardware_encoder: boolean
     crf: number
     write_srt: boolean
+    watermark: WatermarkSettings
   }
   insecure_secret_storage: boolean
   keys_present: Record<string, boolean>
@@ -294,6 +312,15 @@ export const api = {
 
   deleteSecret: (key: string) =>
     request<void>(`/api/settings/secrets/${key}`, { method: 'DELETE' }),
+
+  uploadWatermark: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<Settings>('/api/watermark', { method: 'POST', body: form })
+  },
+  deleteWatermark: () => request<Settings>('/api/watermark', { method: 'DELETE' }),
+  /** Cache-busted so a re-upload shows immediately instead of the browser's copy. */
+  watermarkFileUrl: () => `/api/watermark/file?t=${Date.now()}`,
 
   mediaUrl: (jobId: string) => `/api/jobs/${jobId}/media`,
 }

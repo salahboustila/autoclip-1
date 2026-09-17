@@ -1,7 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-import { api, type ProviderStatus, type Settings as SettingsData, type SystemStatus } from '../api'
+import {
+  api,
+  type ProviderStatus,
+  type Settings as SettingsData,
+  type SystemStatus,
+  type WatermarkPosition,
+} from '../api'
 import { ErrorNote } from '../components/ErrorNote'
+
+const WATERMARK_POSITIONS: { value: WatermarkPosition; label: string }[] = [
+  { value: 'top-left', label: 'Top left' },
+  { value: 'top-right', label: 'Top right' },
+  { value: 'center', label: 'Center' },
+  { value: 'bottom-left', label: 'Bottom left' },
+  { value: 'bottom-right', label: 'Bottom right' },
+]
 
 const SECRET_LABELS: Record<string, string> = {
   anthropic: 'Anthropic API key',
@@ -16,9 +30,21 @@ export function Settings() {
   const [system, setSystem] = useState<SystemStatus | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [saved, setSaved] = useState(false)
+  const [watermarkPreviewUrl, setWatermarkPreviewUrl] = useState<string | null>(null)
+  const [watermarkBusy, setWatermarkBusy] = useState(false)
+  const watermarkFileInput = useRef<HTMLInputElement>(null)
 
   const reload = () => {
-    void api.getSettings().then(setSettings).catch((e) => setError(e as Error))
+    void api
+      .getSettings()
+      .then((loaded) => {
+        setSettings(loaded)
+        // The image is only fetched once here (and again after an upload) —
+        // not derived from `loaded` on every render — so a position/opacity
+        // tweak doesn't refetch the same picture on every keystroke.
+        setWatermarkPreviewUrl(loaded.export.watermark.filename ? api.watermarkFileUrl() : null)
+      })
+      .catch((e) => setError(e as Error))
     void api.providerStatus().then(setProviders).catch(() => undefined)
     void api.system().then(setSystem).catch(() => undefined)
   }
@@ -33,6 +59,43 @@ export function Settings() {
       setTimeout(() => setSaved(false), 1600)
     } catch (err) {
       setError(err as Error)
+    }
+  }
+
+  /** Commits a change to just the watermark's own fields, spreading the rest
+   * of `export` and of `watermark` so the shallow section-replace that
+   * `PUT /api/settings` does for `export` can't drop an unrelated field. */
+  const patchWatermark = (update: Partial<SettingsData['export']['watermark']>) => {
+    if (!settings) return
+    return patch({
+      export: { ...settings.export, watermark: { ...settings.export.watermark, ...update } },
+    })
+  }
+
+  const uploadWatermark = async (file: File) => {
+    setWatermarkBusy(true)
+    setError(null)
+    try {
+      const updated = await api.uploadWatermark(file)
+      setSettings(updated)
+      setWatermarkPreviewUrl(api.watermarkFileUrl())
+    } catch (err) {
+      setError(err as Error)
+    } finally {
+      setWatermarkBusy(false)
+    }
+  }
+
+  const removeWatermark = async () => {
+    setWatermarkBusy(true)
+    setError(null)
+    try {
+      setSettings(await api.deleteWatermark())
+      setWatermarkPreviewUrl(null)
+    } catch (err) {
+      setError(err as Error)
+    } finally {
+      setWatermarkBusy(false)
     }
   }
 
@@ -269,6 +332,121 @@ export function Settings() {
         </label>
       </Section>
 
+      <Section title="Watermark" note="A logo burned into the corner of every exported clip.">
+        <div className="grid gap-8 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="space-y-6">
+            <div>
+              <span className="eyebrow">Image</span>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => watermarkFileInput.current?.click()}
+                  disabled={watermarkBusy}
+                  className="btn btn-ghost"
+                >
+                  {watermarkBusy
+                    ? 'Working…'
+                    : settings.export.watermark.filename
+                      ? 'Replace image'
+                      : 'Upload image'}
+                </button>
+                {settings.export.watermark.filename && (
+                  <button
+                    type="button"
+                    onClick={removeWatermark}
+                    disabled={watermarkBusy}
+                    className="btn btn-quiet"
+                  >
+                    Remove
+                  </button>
+                )}
+                <span className="text-xs text-ink-500">PNG (with transparency) or JPG</span>
+              </div>
+              <input
+                ref={watermarkFileInput}
+                type="file"
+                className="hidden"
+                accept="image/png,image/jpeg"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) void uploadWatermark(file)
+                  e.target.value = ''
+                }}
+              />
+            </div>
+
+            <label className="flex items-start gap-3 text-sm text-ink-200">
+              <input
+                type="checkbox"
+                checked={settings.export.watermark.enabled}
+                disabled={!settings.export.watermark.filename}
+                onChange={(e) => patchWatermark({ enabled: e.target.checked })}
+                className="mt-0.5 size-4 accent-sodium-500"
+              />
+              <span>
+                Stamp every export
+                {!settings.export.watermark.filename && (
+                  <span className="mt-1 block text-xs text-ink-500">
+                    Upload an image first.
+                  </span>
+                )}
+              </span>
+            </label>
+
+            <div>
+              <span className="eyebrow">Position</span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {WATERMARK_POSITIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => patchWatermark({ position: option.value })}
+                    className={[
+                      'btn',
+                      option.value === settings.export.watermark.position
+                        ? 'btn-primary'
+                        : 'btn-ghost',
+                    ].join(' ')}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <PercentSlider
+                label="Size"
+                hint="Scales with the exported video's width."
+                value={settings.export.watermark.scale_pct}
+                min={2}
+                max={60}
+                onCommit={(value) => patchWatermark({ scale_pct: value })}
+              />
+              <PercentSlider
+                label="Opacity"
+                value={settings.export.watermark.opacity_pct}
+                min={0}
+                max={100}
+                onCommit={(value) => patchWatermark({ opacity_pct: value })}
+              />
+            </div>
+          </div>
+
+          <div>
+            <span className="eyebrow">Preview</span>
+            <div className="mt-2">
+              <WatermarkPreview
+                imageUrl={watermarkPreviewUrl}
+                position={settings.export.watermark.position}
+                scalePct={settings.export.watermark.scale_pct}
+                opacityPct={settings.export.watermark.opacity_pct}
+              />
+            </div>
+          </div>
+        </div>
+      </Section>
+
       {system && (
         <Section title="This machine">
           <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
@@ -377,6 +555,106 @@ function NumberField({
         onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
       />
     </label>
+  )
+}
+
+/** A range slider with a live numeric readout. Commits on release/key-up
+ * rather than on every drag tick, the slider equivalent of NumberField's
+ * commit-on-blur — so dragging doesn't fire a PUT per pixel. */
+function PercentSlider({
+  label,
+  hint,
+  value,
+  min,
+  max,
+  onCommit,
+}: {
+  label: string
+  hint?: string
+  value: number
+  min: number
+  max: number
+  onCommit: (value: number) => void
+}) {
+  const [draft, setDraft] = useState(value)
+  useEffect(() => setDraft(value), [value])
+
+  const commit = (next: number) => {
+    const clamped = Math.min(max, Math.max(min, next))
+    if (clamped !== value) onCommit(clamped)
+  }
+
+  return (
+    <label className="block">
+      <span className="eyebrow">{label}</span>
+      <div className="mt-1.5 flex items-center gap-3">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          value={draft}
+          onChange={(e) => setDraft(Number(e.target.value))}
+          onMouseUp={(e) => commit(Number(e.currentTarget.value))}
+          onTouchEnd={(e) => commit(Number(e.currentTarget.value))}
+          onKeyUp={(e) => commit(Number(e.currentTarget.value))}
+          className="h-1 flex-1 cursor-pointer accent-sodium-500"
+        />
+        <span className="numeric w-10 shrink-0 text-right text-sm text-ink-300">{draft}%</span>
+      </div>
+      {hint && <span className="mt-1.5 block text-xs leading-snug text-ink-500">{hint}</span>}
+    </label>
+  )
+}
+
+/** A mock 9:16 frame with the uploaded image positioned exactly the way
+ * ffmpeg's overlay filter will place it — same corner, same margin, same
+ * scale-of-width, same opacity — so this is a true preview, not a mockup. */
+function WatermarkPreview({
+  imageUrl,
+  position,
+  scalePct,
+  opacityPct,
+}: {
+  imageUrl: string | null
+  position: WatermarkPosition
+  scalePct: number
+  opacityPct: number
+}) {
+  // Mirrors WATERMARK_MARGIN_FRACTION in pipeline/export.py: the gap is a
+  // fraction of the frame's *width* on every side. left/right percentages
+  // already mean that, but top/bottom percentages are of the height — so the
+  // vertical gap is a margin instead, whose percentages always use the width.
+  const margin = '4%'
+  const placement: React.CSSProperties = {
+    position: 'absolute',
+    width: `${scalePct}%`,
+    opacity: opacityPct / 100,
+  }
+  if (position === 'center') {
+    placement.top = '50%'
+    placement.left = '50%'
+    placement.transform = 'translate(-50%, -50%)'
+  } else {
+    if (position.startsWith('top')) {
+      placement.top = 0
+      placement.marginTop = margin
+    } else {
+      placement.bottom = 0
+      placement.marginBottom = margin
+    }
+    if (position.endsWith('left')) placement.left = margin
+    else placement.right = margin
+  }
+
+  return (
+    <div className="relative aspect-[9/16] w-36 overflow-hidden rounded-[var(--radius-field)] border border-ink-800 bg-gradient-to-br from-ink-850 to-ink-900">
+      <span className="absolute inset-0 grid place-items-center px-3 text-center text-[0.65rem] leading-snug text-ink-700">
+        9:16 frame
+      </span>
+      {imageUrl && (
+        <img src={imageUrl} alt="Watermark placement preview" style={placement} className="pointer-events-none" />
+      )}
+    </div>
   )
 }
 
