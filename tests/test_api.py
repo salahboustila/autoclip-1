@@ -297,6 +297,31 @@ class TestSources:
         assert response.status_code == 415
         assert "supported" in response.json()["detail"]["message"]
 
+    def test_a_refused_download_is_logged_not_just_returned(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # The reason used to reach the browser only, so a later "it wouldn't
+        # download" left nothing in the log but a bare 422 on the access line.
+        import logging
+
+        from autoclip.pipeline import ingest as ingest_module
+
+        def refuse(url: str, settings: object) -> None:
+            raise ingest_module.IngestError(
+                "YouTube blocked this download with a bot check.", hint="Use browser cookies."
+            )
+
+        monkeypatch.setattr(ingest_module, "ingest_youtube", refuse)
+
+        with caplog.at_level(logging.WARNING, logger="autoclip.api.sources"):
+            response = client.post(
+                "/api/sources/youtube", json={"url": "https://www.youtube.com/watch?v=abc"}
+            )
+
+        assert response.status_code == 422
+        assert "bot check" in response.json()["detail"]["message"]
+        assert "bot check" in caplog.text
+
 
 class TestJobs:
     def test_create_and_fetch(self, client: TestClient, source: Source) -> None:

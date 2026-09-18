@@ -53,6 +53,10 @@ async def ingest_youtube(payload: YouTubeIngestIn) -> SourceOut:
     try:
         source = await asyncio.to_thread(ingest.ingest_youtube, payload.url, settings)
     except ingest.IngestError as exc:
+        # Logged as well as returned: the browser shows this to whoever is at the
+        # screen, and without a copy in the log a later "it wouldn't download"
+        # leaves nothing behind but a bare 422 in the access line.
+        log.warning("YouTube ingest failed for %s: %s", payload.url, exc)
         # 422 rather than 500: the request was well-formed, but the content
         # can't be fetched, and the hint tells the user what to change.
         raise HTTPException(
