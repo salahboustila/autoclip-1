@@ -100,3 +100,36 @@ def test_a_bot_check_is_reported_at_once_without_retrying(
 
     assert len(attempts) == 1
     assert sleeps == []
+
+
+class TestBotCheckHint:
+    """The hint used to offer "chrome" and "edge" on Windows, where yt-dlp cannot read
+    either browser's cookies — so following it could only ever fail again."""
+
+    def test_windows_is_pointed_at_firefox_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ingest.sys, "platform", "win32")
+
+        hint = ingest._translate_ytdlp_error(Exception(BOT_CHECK), IngestSettings()).hint
+
+        assert "firefox" in hint
+        assert '"chrome"' not in hint
+        assert '"edge"' not in hint
+
+    def test_a_chromium_browser_already_set_is_explained(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(ingest.sys, "platform", "win32")
+        settings = IngestSettings().model_copy(update={"cookies_from_browser": "edge"})
+
+        hint = ingest._translate_ytdlp_error(Exception(BOT_CHECK), settings).hint
+
+        assert "cannot read" in hint
+        assert "Firefox" in hint
+
+    def test_elsewhere_the_full_list_still_stands(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ingest.sys, "platform", "linux")
+
+        hint = ingest._translate_ytdlp_error(Exception(BOT_CHECK), IngestSettings()).hint
+
+        assert '"chrome"' in hint
+        assert '"firefox"' in hint

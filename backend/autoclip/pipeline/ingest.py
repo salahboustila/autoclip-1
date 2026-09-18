@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import re
 import shutil
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -40,6 +41,11 @@ _BOT_CHECK_MARKERS = (
     "this content isn't available",
     "player response",
 )
+
+#: Browsers whose cookies yt-dlp cannot decrypt on Windows: Chromium locks them
+#: behind app-bound encryption, which it has no support for. Naming them in a hint
+#: sends people to set up cookies that can never work.
+_UNREADABLE_ON_WINDOWS = ("chrome", "chromium", "edge", "brave", "opera", "vivaldi")
 
 #: yt-dlp error fragments that mean the request never reached YouTube: the DNS
 #: lookup or the connection itself failed. A Wi-Fi drop or a VPN reconnecting
@@ -195,6 +201,40 @@ def _is_network_error(exc: Exception) -> bool:
     return any(marker in message for marker in _NETWORK_MARKERS)
 
 
+def _cookie_hint(settings: IngestSettings) -> str:
+    """What to do about a bot check, given where cookies are set to come from."""
+    browser = (settings.cookies_from_browser or "").lower()
+    windows = sys.platform == "win32"
+
+    if browser and windows and browser in _UNREADABLE_ON_WINDOWS:
+        return (
+            f"Cookies are set to come from {settings.cookies_from_browser}, but on Windows "
+            "Chromium browsers encrypt their cookies with a key yt-dlp cannot read, so none "
+            "of them ever reach YouTube. Use Firefox instead: sign in to YouTube there, set "
+            '`ingest.cookies_from_browser` to "firefox", and close Firefox before downloading.'
+        )
+    if browser:
+        return (
+            f"Cookies are already being read from {settings.cookies_from_browser}, but "
+            "YouTube still refused. Make sure you are signed in to YouTube in that "
+            "browser and that the browser is fully closed — it locks its cookie "
+            "database while running."
+        )
+
+    choices = (
+        '"firefox". Chrome and Edge cannot be used on Windows: they encrypt their cookies '
+        "with a key yt-dlp cannot read"
+        if windows
+        else '"chrome", "firefox", "edge"'
+    )
+    return (
+        "YouTube is asking for proof you're not a bot. Set a browser to pull cookies from — "
+        f"in Settings, or via config.json's `ingest.cookies_from_browser` (e.g. {choices}). "
+        "You must be signed in to YouTube in that browser, and it must be closed while "
+        "AutoClip downloads."
+    )
+
+
 def _translate_ytdlp_error(exc: Exception, settings: IngestSettings) -> IngestError:
     """Turn a yt-dlp failure into something the user can act on."""
     message = str(exc).lower()
@@ -212,22 +252,9 @@ def _translate_ytdlp_error(exc: Exception, settings: IngestSettings) -> IngestEr
         )
 
     if any(marker in message for marker in _BOT_CHECK_MARKERS):
-        if settings.cookies_from_browser:
-            hint = (
-                f"Cookies are already being read from {settings.cookies_from_browser}, but "
-                "YouTube still refused. Make sure you are signed in to YouTube in that "
-                "browser and that the browser is fully closed — it locks its cookie "
-                "database while running."
-            )
-        else:
-            hint = (
-                "YouTube is asking for proof you're not a bot. Set a browser to pull "
-                "cookies from — in Settings, or via config.json's "
-                '`ingest.cookies_from_browser` (e.g. "chrome", "firefox", "edge"). '
-                "You must be signed in to YouTube in that browser, and it must be closed "
-                "while AutoClip downloads."
-            )
-        return IngestError("YouTube blocked this download with a bot check.", hint=hint)
+        return IngestError(
+            "YouTube blocked this download with a bot check.", hint=_cookie_hint(settings)
+        )
 
     if "private video" in message or "members-only" in message:
         return IngestError(
