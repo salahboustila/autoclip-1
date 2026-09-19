@@ -207,14 +207,28 @@ export class ApiError extends Error {
   }
 }
 
+/** What to do when the server is unreachable — the one failure the browser
+ * reports as a bare "Failed to fetch", which points nowhere. */
+const SERVER_UNREACHABLE_HINT =
+  "AutoClip's black window is probably closed, or it stopped while this page stayed open. " +
+  'Start AutoClip again from the desktop shortcut, then reload this page. ' +
+  'An import of a large file fails the same way if the window is closed part-way through.'
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: {
-      ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-      ...init?.headers,
-    },
-  })
+  let response: Response
+  try {
+    response = await fetch(path, {
+      ...init,
+      headers: {
+        ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        ...init?.headers,
+      },
+    })
+  } catch {
+    // fetch rejects only when no reply arrived at all: nothing is listening, or
+    // the connection died mid-request. Status 0 marks "never reached the server".
+    throw new ApiError("AutoClip's server is not responding.", 0, SERVER_UNREACHABLE_HINT)
+  }
 
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`

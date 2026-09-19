@@ -94,7 +94,11 @@ async def upload_source(file: UploadFile = File(...)) -> SourceOut:
 
     try:
         source = await asyncio.to_thread(
-            ingest.ingest_file, staging_path, move=True, title=filename.stem
+            ingest.ingest_file,
+            staging_path,
+            move=True,
+            title=filename.stem,
+            filename=filename.name,
         )
     except ingest.IngestError as exc:
         staging_path.unlink(missing_ok=True)

@@ -18,10 +18,12 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -104,6 +106,60 @@ def ffprobe_path() -> str:
 
 #: Characters that terminate or restructure a filtergraph if left unescaped.
 _FILTER_SPECIALS = "\\'[],;:"
+
+
+#: A line of ``ffmpeg -decoders``: six flag characters, then the decoder name,
+#: e.g. ``  V....D av1    Alliance for Open Media AV1``.
+_DECODER_LINE = re.compile(r"^\s*[VAS][.A-Z]{5}\s+(?P<name>\S+)")
+#: Library decoders name the codec they serve: ``libdav1d ... (codec av1)``.
+_DECODER_CODEC = re.compile(r"\(codec (\w+)\)")
+
+
+def parse_decoders(listing: str) -> frozenset[str]:
+    """Codec names found in ``ffmpeg -decoders`` output.
+
+    Both spellings count: the decoder's own name (``libdav1d``) and the codec it
+    serves (``av1``), because ffprobe reports the latter. Rows are only read
+    after the ``------`` separator, since the legend above it looks the same.
+    """
+    names: set[str] = set()
+    in_table = False
+    for line in listing.splitlines():
+        stripped = line.strip()
+        if not in_table:
+            # The legend above the separator ("V..... = Video") has the shape of
+            # a decoder row, so nothing before it can be trusted.
+            in_table = len(stripped) >= 3 and set(stripped) == {"-"}
+            continue
+        match = _DECODER_LINE.match(line)
+        if not match:
+            continue
+        names.add(match.group("name").lower())
+        codec = _DECODER_CODEC.search(line)
+        if codec:
+            names.add(codec.group(1).lower())
+    return frozenset(names)
+
+
+@lru_cache(maxsize=1)
+def available_decoders() -> frozenset[str]:
+    """What this ffmpeg build can decode. Cached; it cannot change while we run."""
+    command = [ffmpeg_path(), "-hide_banner", "-decoders"]
+    proc = subprocess.run(command, capture_output=True, text=True, check=False, encoding="utf-8")
+    if proc.returncode != 0:
+        log.warning("Could not list ffmpeg decoders; treating every codec as decodable.")
+        return frozenset()
+    return parse_decoders(proc.stdout)
+
+
+def can_decode(codec: str) -> bool:
+    """Whether this build can decode ``codec``, spelled as ffprobe reports it.
+
+    Permissive when the decoder list is unavailable: refusing a file we merely
+    failed to ask about would be worse than letting the decode report it.
+    """
+    decoders = available_decoders()
+    return not decoders or codec.lower() in decoders
 
 
 def escape_filter_path(path: Path | str) -> str:

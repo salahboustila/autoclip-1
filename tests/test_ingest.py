@@ -21,6 +21,11 @@ BOT_CHECK = "ERROR: [youtube] abc: Sign in to confirm you're not a bot"
 URL = "https://www.youtube.com/watch?v=NqAdZpYmefU"
 
 
+#: Captured before the fixture below stubs it out, so the tests that are about
+#: validation itself can still reach the real one.
+_REAL_PROBE_AND_VALIDATE = ingest._probe_and_validate
+
+
 @pytest.fixture(autouse=True)
 def sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     """Record retry pauses instead of waiting, and skip probing the fake video."""
@@ -133,3 +138,61 @@ class TestBotCheckHint:
 
         assert '"chrome"' in hint
         assert '"firefox"' in hint
+
+
+class TestUndecodableMedia:
+    """An unplayable codec used to surface much later, in ffmpeg's own words, from
+    the middle of a job. At import we can name the codec and the way out."""
+
+    def _probed_as(
+        self, monkeypatch: pytest.MonkeyPatch, video: str, audio: str, decodable: set[str]
+    ) -> None:
+        monkeypatch.setattr(
+            ingest.ffmpeg,
+            "probe",
+            lambda path: SimpleNamespace(
+                video_codec=video,
+                audio_codec=audio,
+                has_audio=True,
+                duration_s=60.0,
+                width=1920,
+                height=1080,
+                fps=60.0,
+                title=None,
+            ),
+        )
+        monkeypatch.setattr(ingest.ffmpeg, "can_decode", lambda codec: codec in decodable)
+
+    def test_the_codec_and_a_way_out_are_named(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        self._probed_as(monkeypatch, "av1", "opus", decodable={"opus"})
+
+        with pytest.raises(ingest.IngestError) as caught:
+            _REAL_PROBE_AND_VALIDATE(tmp_path / "clip.mp4")
+
+        assert "cannot decode AV1 video" in str(caught.value)
+        assert "libx264" in caught.value.hint
+
+    def test_a_decodable_file_is_accepted(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        self._probed_as(monkeypatch, "av1", "opus", decodable={"av1", "opus"})
+
+        info = _REAL_PROBE_AND_VALIDATE(tmp_path / "clip.mp4")
+
+        assert info.video_codec == "av1"
+
+
+def test_an_upload_keeps_the_name_it_arrived_with(tmp_path: Path) -> None:
+    # An upload is staged to a temp file, so without the original name the source
+    # would remember "tmpvkq0d2me.mp4" and show that in the UI.
+    staged = tmp_path / "tmpvkq0d2me.mp4"
+    staged.write_bytes(b"video")
+
+    source = ingest.ingest_file(
+        staged, move=True, title="24 Hours in China", filename="24 Hours in China.mp4"
+    )
+
+    assert source.filename == "24 Hours in China.mp4"
+    assert source.title == "24 Hours in China"

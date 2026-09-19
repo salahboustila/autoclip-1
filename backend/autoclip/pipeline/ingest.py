@@ -294,11 +294,21 @@ def _find_downloaded_file(directory: Path) -> Path | None:
 # --------------------------------------------------------------------------
 
 
-def ingest_file(path: Path, *, move: bool = False, title: str | None = None) -> Source:
+def ingest_file(
+    path: Path,
+    *,
+    move: bool = False,
+    title: str | None = None,
+    filename: str | None = None,
+) -> Source:
     """Register a local file as a source, copying it into AutoClip's media store.
 
     Copying rather than referencing in place means a job stays reproducible even
     if the user moves or deletes the original.
+
+    ``filename`` is the name the file arrived under. An upload is staged to a
+    temporary file first, so without it the source would remember the staging
+    name (``tmpvkq0d2me.mp4``) instead of what the user chose.
 
     Preconditions:
         path exists and is a readable media file.
@@ -341,7 +351,7 @@ def ingest_file(path: Path, *, move: bool = False, title: str | None = None) -> 
         id=source_id,
         type="upload",
         path=str(target),
-        filename=path.name,
+        filename=filename or path.name,
         title=title or info.title or path.stem,
         duration_s=info.duration_s,
         width=info.width,
@@ -358,6 +368,18 @@ def _probe_and_validate(path: Path) -> ffmpeg.MediaInfo:
         info = ffmpeg.probe(path)
     except ffmpeg.FFmpegError as exc:
         raise IngestError(f"{path.name} could not be read as media.", hint=str(exc)) from exc
+
+    for kind, codec in (("video", info.video_codec), ("audio", info.audio_codec)):
+        if codec and not ffmpeg.can_decode(codec):
+            raise IngestError(
+                f"This FFmpeg build cannot decode {codec.upper()} {kind}.",
+                hint=(
+                    f"{path.name} uses {codec} for its {kind}, and the ffmpeg on this "
+                    "machine has no decoder for it. Install a full build (on Windows: "
+                    "winget install Gyan.FFmpeg), or convert the file first:\n"
+                    f'  ffmpeg -i "{path.name}" -c:v libx264 -c:a aac converted.mp4'
+                ),
+            )
 
     if not info.has_audio:
         raise IngestError(

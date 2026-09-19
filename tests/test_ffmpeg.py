@@ -164,3 +164,40 @@ class TestMediaInfo:
 
         assert info.aspect_ratio is None
         assert info.is_vertical is False
+
+
+class TestDecoderListing:
+    """`can_decode` decides whether an import is refused, so it has to read the
+    real shape of ffmpeg's output — legend rows included."""
+
+    LISTING = """Decoders:
+ V..... = Video
+ A..... = Audio
+ S..... = Subtitle
+ ------
+ V....D av1                  Alliance for Open Media AV1
+ V..... libdav1d             dav1d AV1 decoder by VideoLAN (codec av1)
+ V....D h264                 H.264 / AVC / MPEG-4 AVC
+ A....D opus                 Opus
+ A....D aac                  AAC (Advanced Audio Coding)
+"""
+
+    def test_the_decoder_and_the_codec_it_serves_are_both_listed(self) -> None:
+        names = ffmpeg.parse_decoders(self.LISTING)
+
+        assert {"av1", "libdav1d", "h264", "opus", "aac"} <= names
+
+    def test_a_codec_with_no_decoder_is_absent(self) -> None:
+        assert "vp9" not in ffmpeg.parse_decoders(self.LISTING)
+
+    def test_the_legend_is_not_mistaken_for_decoders(self) -> None:
+        assert "=" not in ffmpeg.parse_decoders(self.LISTING)
+
+    def test_can_decode_stays_permissive_when_the_list_is_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Refusing a file we merely failed to ask about would be worse than
+        # letting the decode itself report the problem.
+        monkeypatch.setattr(ffmpeg, "available_decoders", lambda: frozenset())
+
+        assert ffmpeg.can_decode("av1") is True
