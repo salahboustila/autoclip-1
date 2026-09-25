@@ -18,6 +18,10 @@ DNS_FAILURE = (
     "([Errno 11001] getaddrinfo failed)"
 )
 BOT_CHECK = "ERROR: [youtube] abc: Sign in to confirm you're not a bot"
+#: YouTube's own player text when the signature/n-value JS challenge fails —
+#: confirmed on https://youtu.be/mPQlJp7Rqr0 (2026-09-24).
+CHALLENGE_FAILURE = "ERROR: [youtube] mPQlJp7Rqr0: The page needs to be reloaded"
+COOKIE_DB_MISSING = "ERROR: could not find firefox cookies database in '/some/path'"
 URL = "https://www.youtube.com/watch?v=NqAdZpYmefU"
 
 
@@ -41,13 +45,21 @@ def sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     return pauses
 
 
-def fake_youtube_dl(monkeypatch: pytest.MonkeyPatch, errors: list[str]) -> list[str]:
-    """Replace yt-dlp with a stand-in that raises ``errors`` in turn, then downloads."""
+def fake_youtube_dl(
+    monkeypatch: pytest.MonkeyPatch, errors: list[str]
+) -> tuple[list[str], list[dict]]:
+    """Replace yt-dlp with a stand-in that raises ``errors`` in turn, then downloads.
+
+    Returns the URL and the options dict yt-dlp was constructed with on each
+    attempt, so a retry can be checked for exactly what changed about it.
+    """
     attempts: list[str] = []
+    options_per_attempt: list[dict] = []
 
     class FakeYoutubeDL:
         def __init__(self, options: dict) -> None:
             self.target_dir = Path(options["outtmpl"]).parent
+            options_per_attempt.append(options)
 
         def __enter__(self) -> FakeYoutubeDL:
             return self
@@ -63,13 +75,13 @@ def fake_youtube_dl(monkeypatch: pytest.MonkeyPatch, errors: list[str]) -> list[
             return {"title": "A talk", "duration": 60}
 
     monkeypatch.setattr(yt_dlp, "YoutubeDL", FakeYoutubeDL)
-    return attempts
+    return attempts, options_per_attempt
 
 
 def test_a_dropped_connection_is_retried_until_it_comes_back(
     monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
 ) -> None:
-    attempts = fake_youtube_dl(monkeypatch, [DNS_FAILURE, DNS_FAILURE])
+    attempts, _ = fake_youtube_dl(monkeypatch, [DNS_FAILURE, DNS_FAILURE])
 
     source = ingest.ingest_youtube(URL, IngestSettings())
 
@@ -82,7 +94,7 @@ def test_a_dropped_connection_is_retried_until_it_comes_back(
 def test_a_connection_that_stays_down_is_reported_as_one(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    attempts = fake_youtube_dl(monkeypatch, [DNS_FAILURE] * ingest.NETWORK_ATTEMPTS)
+    attempts, _ = fake_youtube_dl(monkeypatch, [DNS_FAILURE] * ingest.NETWORK_ATTEMPTS)
 
     with pytest.raises(ingest.IngestError) as caught:
         ingest.ingest_youtube(URL, IngestSettings())
@@ -98,13 +110,101 @@ def test_a_connection_that_stays_down_is_reported_as_one(
 def test_a_bot_check_is_reported_at_once_without_retrying(
     monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
 ) -> None:
-    attempts = fake_youtube_dl(monkeypatch, [BOT_CHECK])
+    attempts, _ = fake_youtube_dl(monkeypatch, [BOT_CHECK])
 
     with pytest.raises(ingest.IngestError, match="bot check"):
         ingest.ingest_youtube(URL, IngestSettings())
 
     assert len(attempts) == 1
     assert sleeps == []
+
+
+def test_every_download_allows_the_ejs_challenge_solver(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Permission, not a fetch: yt-dlp only downloads the solver script when a
+    # challenge actually needs it, so this costs nothing on ordinary downloads.
+    _, options = fake_youtube_dl(monkeypatch, [])
+
+    ingest.ingest_youtube(URL, IngestSettings())
+
+    assert options[0]["remote_components"] == ["ejs:github"]
+
+
+class TestChallengeFailure:
+    """YouTube's "page needs to be reloaded" is a different failure than a bot
+    check: it needs the EJS solver *and* real browser cookies together —
+    confirmed manually on https://youtu.be/mPQlJp7Rqr0 (2026-09-24)."""
+
+    def test_retries_once_with_firefox_cookies_when_none_were_configured(
+        self, monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
+    ) -> None:
+        # No browser configured yet — the common case, since this only comes up
+        # the first time a video hits this failure.
+        attempts, options = fake_youtube_dl(monkeypatch, [CHALLENGE_FAILURE])
+
+        source = ingest.ingest_youtube(URL, IngestSettings())
+
+        assert len(attempts) == 2
+        assert sleeps == []  # not a network blip — no backoff before retrying
+        assert "cookiesfrombrowser" not in options[0]
+        assert options[1]["cookiesfrombrowser"] == ("firefox",)
+        assert options[1]["remote_components"] == ["ejs:github"]
+        assert source.title == "A talk"
+
+    def test_the_fallback_browser_is_configurable_by_environment_variable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ingest.ENV_CHALLENGE_BROWSER, "edge")
+        _, options = fake_youtube_dl(monkeypatch, [CHALLENGE_FAILURE])
+
+        ingest.ingest_youtube(URL, IngestSettings())
+
+        assert options[1]["cookiesfrombrowser"] == ("edge",)
+
+    def test_a_second_challenge_failure_after_the_retry_is_reported_plainly(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        attempts, _ = fake_youtube_dl(monkeypatch, [CHALLENGE_FAILURE, CHALLENGE_FAILURE])
+
+        with pytest.raises(ingest.IngestError) as caught:
+            ingest.ingest_youtube(URL, IngestSettings())
+
+        assert len(attempts) == 2  # no third attempt — one retry, not a loop
+        message = str(caught.value)
+        assert message.startswith("YouTube's challenge beat yt-dlp")
+        assert "already retried" in message
+        assert "github.com" in message
+
+    def test_no_cookies_database_is_named_specifically(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Firefox not installed, or never opened — the retry's own failure, not
+        # a second copy of the original error.
+        fake_youtube_dl(monkeypatch, [CHALLENGE_FAILURE, COOKIE_DB_MISSING])
+
+        with pytest.raises(ingest.IngestError) as caught:
+            ingest.ingest_youtube(URL, IngestSettings())
+
+        message = str(caught.value)
+        assert message.startswith("Couldn't read browser cookies")
+        assert "firefox" in message
+        assert "never been opened" in message
+        assert ingest.ENV_CHALLENGE_BROWSER in message
+
+    def test_cookies_already_configured_are_not_retried_a_second_time(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Retrying with the same cookies that just failed would only fail the
+        # same way again.
+        attempts, options = fake_youtube_dl(monkeypatch, [CHALLENGE_FAILURE])
+        settings = IngestSettings().model_copy(update={"cookies_from_browser": "firefox"})
+
+        with pytest.raises(ingest.IngestError) as caught:
+            ingest.ingest_youtube(URL, settings)
+
+        assert len(attempts) == 1  # cookies were already there — no point retrying
+        message = str(caught.value)
+        assert "AutoClip sent yt-dlp's EJS challenge solver" in message
+        assert "already retried" not in message
 
 
 class TestBotCheckHint:

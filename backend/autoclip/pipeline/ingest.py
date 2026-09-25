@@ -7,11 +7,18 @@ A note on YouTube: as of 2026 most anonymous downloads hit a bot check, and
 proof-of-origin tokens no longer clear it reliably — browser cookies do. So
 :class:`IngestError` distinguishes that specific failure and tells the user how
 to fix it, rather than surfacing a raw yt-dlp traceback.
+
+A second, distinct failure — YouTube's own player says "The page needs to be
+reloaded" — means the signature/n-value JS challenge wasn't solved. yt-dlp's
+built-in solvers cover most cases; the rest need its official EJS solver
+script, fetched from GitHub on demand, and a signed-in session. See
+``_is_challenge_error`` for how the two fixes are applied.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
 import sys
@@ -66,6 +73,26 @@ _NETWORK_MARKERS = (
 #: NETWORK_RETRY_DELAY_S and doubles: 3 s, then 6 s.
 NETWORK_ATTEMPTS = 3
 NETWORK_RETRY_DELAY_S = 3.0
+
+#: YouTube's own player-facing text when the signature/n-value JS challenge
+#: couldn't be solved and the request is refused. Not yt-dlp's wording — it
+#: comes straight from YouTube's player response, so it can't be found anywhere
+#: in the yt-dlp package itself.
+_CHALLENGE_MARKERS = ("the page needs to be reloaded",)
+
+#: Browser to retry with when the JS challenge fails and no browser is already
+#: configured. Firefox because it's the only one yt-dlp can read cookies from
+#: on Windows (see _UNREADABLE_ON_WINDOWS) — the same reason _cookie_hint steers
+#: people there. Overridable per machine without touching Settings.
+ENV_CHALLENGE_BROWSER = "AUTOCLIP_YTDLP_CHALLENGE_BROWSER"
+DEFAULT_CHALLENGE_BROWSER = "firefox"
+
+#: Permission, not a fetch: yt-dlp only downloads this when a challenge actually
+#: needs solving, and it's yt-dlp's own signed release — nothing browser-related.
+#: Confirmed 2026-09-24 (https://youtu.be/mPQlJp7Rqr0) that this alone clears
+#: some "page needs to be reloaded" failures, so it's sent on every request
+#: rather than held back for a retry.
+_REMOTE_COMPONENTS = ["ejs:github"]
 
 
 class IngestError(RuntimeError):
@@ -138,6 +165,7 @@ def ingest_youtube(
         "progress_hooks": [hook],
         "retries": 3,
         "fragment_retries": 3,
+        "remote_components": list(_REMOTE_COMPONENTS),
     }
     if settings.cookies_from_browser:
         # yt-dlp expects a tuple; only the browser name is required.
@@ -147,26 +175,47 @@ def ingest_youtube(
         options["subtitleslangs"] = ["en.*"]
         options["subtitlesformat"] = "json3"
 
+    # A fresh cookie jar is only worth trying once, and only if the request
+    # didn't already carry one — retrying with the same cookies that just
+    # failed would just fail again the same way.
+    challenge_retry_available = not settings.cookies_from_browser
+    challenge_retried = False
+
     metadata: dict | None = None
-    for attempt in range(1, NETWORK_ATTEMPTS + 1):
+    network_attempt = 1
+    while True:
         try:
             with yt_dlp.YoutubeDL(options) as ydl:
                 metadata = ydl.extract_info(url, download=True)
             break
         except yt_dlp.utils.DownloadError as exc:
-            if attempt < NETWORK_ATTEMPTS and _is_network_error(exc):
-                delay = NETWORK_RETRY_DELAY_S * 2 ** (attempt - 1)
+            if challenge_retry_available and not challenge_retried and _is_challenge_error(exc):
+                challenge_retried = True
+                browser = _challenge_browser(settings)
+                options = {**options, "cookiesfrombrowser": (browser,)}
+                log.warning(
+                    "YouTube's JS challenge failed for %s; retrying once with %s cookies: %s",
+                    url,
+                    browser,
+                    exc,
+                )
+                continue  # not a network blip, so no backoff — retry right away
+            if network_attempt < NETWORK_ATTEMPTS and _is_network_error(exc):
+                delay = NETWORK_RETRY_DELAY_S * 2 ** (network_attempt - 1)
                 log.warning(
                     "Couldn't reach YouTube (attempt %d/%d), retrying in %.0fs: %s",
-                    attempt,
+                    network_attempt,
                     NETWORK_ATTEMPTS,
                     delay,
                     exc,
                 )
                 time.sleep(delay)
+                network_attempt += 1
                 continue
             shutil.rmtree(target_dir, ignore_errors=True)
-            raise _translate_ytdlp_error(exc, settings) from exc
+            raise _translate_ytdlp_error(
+                exc, settings, challenge_retried=challenge_retried
+            ) from exc
         except Exception as exc:
             shutil.rmtree(target_dir, ignore_errors=True)
             raise IngestError(f"Could not download {url}: {exc}") from exc
@@ -199,6 +248,33 @@ def _is_network_error(exc: Exception) -> bool:
     """Whether a yt-dlp failure is the connection's fault rather than YouTube's."""
     message = str(exc).lower()
     return any(marker in message for marker in _NETWORK_MARKERS)
+
+
+def _is_challenge_error(exc: Exception) -> bool:
+    """Whether a yt-dlp failure is YouTube's own "page needs to be reloaded"."""
+    message = str(exc).lower()
+    return any(marker in message for marker in _CHALLENGE_MARKERS)
+
+
+def _is_cookie_database_missing(exc: Exception) -> bool:
+    """Whether a retry with browser cookies failed because there was no database
+    to read — yt-dlp's own wording for "this browser isn't installed, or has
+    never been run", for either its Firefox path or the generic one."""
+    return "cookies database" in str(exc).lower()
+
+
+def _challenge_browser(settings: IngestSettings) -> str:
+    """Browser to retry with when YouTube's JS challenge fails.
+
+    Prefers one the user already configured for the ordinary bot-check flow —
+    no reason to ask twice. Otherwise falls back to ENV_CHALLENGE_BROWSER, or
+    DEFAULT_CHALLENGE_BROWSER.
+    """
+    return (
+        settings.cookies_from_browser
+        or os.environ.get(ENV_CHALLENGE_BROWSER)
+        or DEFAULT_CHALLENGE_BROWSER
+    )
 
 
 def _cookie_hint(settings: IngestSettings) -> str:
@@ -235,7 +311,9 @@ def _cookie_hint(settings: IngestSettings) -> str:
     )
 
 
-def _translate_ytdlp_error(exc: Exception, settings: IngestSettings) -> IngestError:
+def _translate_ytdlp_error(
+    exc: Exception, settings: IngestSettings, *, challenge_retried: bool = False
+) -> IngestError:
     """Turn a yt-dlp failure into something the user can act on."""
     message = str(exc).lower()
 
@@ -250,6 +328,9 @@ def _translate_ytdlp_error(exc: Exception, settings: IngestSettings) -> IngestEr
                 f"Original error: {exc}"
             ),
         )
+
+    if _is_challenge_error(exc) or (challenge_retried and _is_cookie_database_missing(exc)):
+        return _translate_challenge_error(exc, settings, challenge_retried=challenge_retried)
 
     if any(marker in message for marker in _BOT_CHECK_MARKERS):
         return IngestError(
@@ -274,6 +355,48 @@ def _translate_ytdlp_error(exc: Exception, settings: IngestSettings) -> IngestEr
         hint=(
             "YouTube changes frequently and yt-dlp is updated often. Try "
             "`autoclip update-ytdlp` to pull the latest version.\n\n"
+            f"Original error: {exc}"
+        ),
+    )
+
+
+def _translate_challenge_error(
+    exc: Exception, settings: IngestSettings, *, challenge_retried: bool
+) -> IngestError:
+    """YouTube's JS challenge beat yt-dlp. Name whichever half of the fix —
+    the EJS solver script, or a signed-in browser's cookies — is missing,
+    rather than a generic failure that sends people to `update-ytdlp`."""
+    browser = _challenge_browser(settings)
+
+    if challenge_retried and _is_cookie_database_missing(exc):
+        return IngestError(
+            "Couldn't read browser cookies to get past YouTube's challenge.",
+            hint=(
+                f"AutoClip tried reading cookies from {browser}, but yt-dlp found no "
+                f"cookie database for it on this machine — {browser} may not be "
+                f"installed, or has never been opened. Open {browser} once, sign in to "
+                "youtube.com, then retry. To use a different browser instead, set "
+                f"`ingest.cookies_from_browser` in Settings, or the {ENV_CHALLENGE_BROWSER} "
+                "environment variable.\n\n"
+                f"Original error: {exc}"
+            ),
+        )
+
+    tried = (
+        f"AutoClip already retried with yt-dlp's EJS challenge solver and {browser} cookies, "
+        "and YouTube still refused."
+        if challenge_retried
+        else "AutoClip sent yt-dlp's EJS challenge solver (--remote-components ejs:github), "
+        "and YouTube still refused."
+    )
+    return IngestError(
+        "YouTube's challenge beat yt-dlp on this video.",
+        hint=(
+            f"{tried} That usually means this machine can't reach github.com to fetch the "
+            "solver script, or the browser's cookies aren't actually signed in to YouTube. "
+            "Check that github.com is reachable, and that you're signed in to YouTube in "
+            f"{browser}. A newer yt-dlp occasionally handles this differently too — "
+            "`autoclip update-ytdlp` is worth a try, though it isn't the likely fix here.\n\n"
             f"Original error: {exc}"
         ),
     )
