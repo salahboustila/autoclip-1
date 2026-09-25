@@ -104,9 +104,21 @@ def _migration_v1(conn: sqlite3.Connection) -> None:
     conn.executescript(_V1)
 
 
+_V2 = """
+ALTER TABLE clip_edits ADD COLUMN headline_text TEXT NOT NULL DEFAULT '';
+ALTER TABLE clip_edits ADD COLUMN headline_enabled INTEGER NOT NULL DEFAULT 1;
+"""
+
+
+def _migration_v2(conn: sqlite3.Connection) -> None:
+    """AI Clip Headlines: the generated (and user-editable) headline text,
+    stored per clip so it survives a reopen rather than being regenerated."""
+    conn.executescript(_V2)
+
+
 #: Ordered migrations. Index + 1 is the resulting ``user_version``.
 #: Append only — never edit a migration that has shipped.
-MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [_migration_v1]
+MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [_migration_v1, _migration_v2]
 
 SCHEMA_VERSION = len(MIGRATIONS)
 

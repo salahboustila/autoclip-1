@@ -153,6 +153,9 @@ class ClipOut(BaseModel):
     user_trimmed: bool
     caption_style: str = "bold_pop"
     ratio: str = "9:16"
+    #: AI-generated, freely editable — see db.models.ClipEdit.headline_text.
+    headline_text: str = ""
+    headline_enabled: bool = True
     exports: list[ExportOut] = Field(default_factory=list)
 
     @classmethod
@@ -180,6 +183,8 @@ class ClipOut(BaseModel):
             user_trimmed=clip.user_trimmed,
             caption_style=edit.caption_style if edit else "bold_pop",
             ratio=edit.ratio if edit else "9:16",
+            headline_text=edit.headline_text if edit else "",
+            headline_enabled=edit.headline_enabled if edit else True,
             exports=[ExportOut.of(e) for e in (exports or [])],
         )
 
@@ -197,6 +202,13 @@ class CaptionPatchIn(BaseModel):
     words: list[WordOut] | None = None
     caption_style: str | None = None
     ratio: Literal["9:16", "1:1", "16:9"] | None = None
+
+
+class HeadlinePatchIn(BaseModel):
+    """Manual edit to a clip's headline text, or its per-clip on/off toggle."""
+
+    headline_text: str | None = Field(default=None, max_length=200)
+    headline_enabled: bool | None = None
 
 
 class ExportRequestIn(BaseModel):

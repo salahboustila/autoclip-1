@@ -25,7 +25,7 @@ from ..db import store
 from ..db.models import Clip, Export, Job, Source, new_id, utcnow
 from ..db.models import Transcript as TranscriptRow
 from ..providers import build_provider, detection_config
-from . import Stage, captions, export, ffmpeg, highlights, prepare, transcribe
+from . import Stage, captions, export, ffmpeg, headlines, highlights, prepare, transcribe
 from .prepare import Silence
 from .reframe import ReframeConfig, build_crop_path
 from .reframe.croppath import CropPath
@@ -299,10 +299,28 @@ class PipelineRunner:
             config,
             job_id=self.job.id,
             silences=silences,
-            on_progress=self._stage_progress(stage),
+            on_progress=lambda f: self._emit(stage, f * 0.85),
         )
 
         store.replace_clips(self.job.id, clips)
+
+        # Reuses the provider already built and authenticated for highlight
+        # detection above, rather than making the caller choose a second one —
+        # one AI provider selection covers both. Skipped entirely (no LLM
+        # calls, no cost) when the feature is off in settings.
+        if self.settings.export.headline.enabled:
+            self._emit(stage, 0.85, "Writing headlines")
+            headline_map = await headlines.generate(
+                clips,
+                transcript,
+                provider,
+                on_progress=lambda f: self._emit(stage, 0.85 + f * 0.15),
+            )
+            for clip in clips:
+                text = headline_map.get(clip.id)
+                if text:
+                    store.update_clip_headline(clip.id, headline_text=text)
+
         self._finish_stage(stage)
         return clips
 
@@ -379,6 +397,13 @@ class PipelineRunner:
                 clip.title or f"clip-{clip.rank}", ratio
             )
 
+            # Reading clip_edits here (rather than trusting whatever
+            # _stage_highlights just generated) is what makes a retry honour
+            # anything the user already changed in the Review UI between
+            # runs — edited text, or turned off for just this one clip.
+            edit = store.get_clip_edit(clip.id)
+            headline_text = edit.headline_text if edit and edit.headline_enabled else ""
+
             request = export.ExportRequest(
                 source=source_path,
                 destination=destination,
@@ -388,6 +413,7 @@ class PipelineRunner:
                 words=words,
                 style=style,
                 ratio=ratio,
+                headline_text=headline_text,
             )
 
             def clip_progress(fraction: float, i: int = index) -> None:

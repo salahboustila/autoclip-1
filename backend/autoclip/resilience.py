@@ -171,11 +171,21 @@ def install_crash_logging(directory: Path) -> None:
     def thread_excepthook(args: threading.ExceptHookArgs) -> None:
         # SystemExit ends a thread quietly by design; the default hook ignores it too.
         if args.exc_type is not SystemExit:
-            crash_log.error(
-                "Unhandled exception in thread %s.",
-                args.thread.name if args.thread else "unknown",
-                exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
-            )
+            thread_name = args.thread.name if args.thread else "unknown"
+            # exc_value can genuinely be None (an exception type raised with no
+            # instance); Logger.error's exc_info tuple form requires a real
+            # BaseException in the middle slot, so that case logs without one
+            # rather than passing a mismatched tuple through.
+            if args.exc_value is not None:
+                crash_log.error(
+                    "Unhandled exception in thread %s.",
+                    thread_name,
+                    exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+                )
+            else:
+                crash_log.error(
+                    "Unhandled exception in thread %s (%s).", thread_name, args.exc_type
+                )
         previous_thread_hook(args)
 
     sys.excepthook = excepthook

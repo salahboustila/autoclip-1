@@ -88,9 +88,12 @@ def refine(
     if end_word <= start_word:
         return None
 
-    end_word = _clamp_duration(transcript, start_word, end_word, min_duration_s, max_duration_s)
-    if end_word is None:
+    clamped_end_word = _clamp_duration(
+        transcript, start_word, end_word, min_duration_s, max_duration_s
+    )
+    if clamped_end_word is None:
         return None
+    end_word = clamped_end_word
 
     start_s, end_s = transcript.time_range(start_word, end_word)
     start_s = align_start(start_s, silences or [])

@@ -552,6 +552,169 @@ class TestWatermark:
         assert _frame_signature(faint, 3.0) != _frame_signature(solid, 3.0)
 
 
+class TestHeadline:
+    def test_visibly_changes_the_top_of_the_frame(self, source_video, words, tmp_path) -> None:
+        plain = tmp_path / "plain.mp4"
+        headlined = tmp_path / "headlined.mp4"
+
+        export.export_clip(
+            make_request(source_video, plain, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-plain",
+        )
+        export.export_clip(
+            make_request(
+                source_video,
+                headlined,
+                centre_crop(SOURCE_W, SOURCE_H, 5.0),
+                words,
+                headline_text="A real overlay headline",
+            ),
+            work_dir=tmp_path / "work-headlined",
+        )
+
+        # Top strip of the frame, where a "top"-positioned headline sits.
+        top_strip = "1080:300:0:0"
+        assert _region_signature(plain, 3.0, top_strip) != _region_signature(
+            headlined, 3.0, top_strip
+        )
+
+    def test_empty_headline_text_renders_exactly_like_no_headline_at_all(
+        self, source_video, words, tmp_path
+    ) -> None:
+        without = tmp_path / "without.mp4"
+        empty = tmp_path / "empty.mp4"
+
+        export.export_clip(
+            make_request(source_video, without, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-without",
+        )
+        export.export_clip(
+            make_request(
+                source_video,
+                empty,
+                centre_crop(SOURCE_W, SOURCE_H, 5.0),
+                words,
+                headline_text="",
+            ),
+            work_dir=tmp_path / "work-empty",
+        )
+
+        assert _frame_signature(without, 3.0) == _frame_signature(empty, 3.0)
+
+    def test_disabled_globally_renders_like_no_headline_even_with_text_set(
+        self, source_video, words, tmp_path
+    ) -> None:
+        """The "on but degrades to off" contract, exercised at the settings
+        level rather than the per-clip text — mirrors
+        TestWatermark.test_disabled_renders_exactly_like_no_watermark_at_all."""
+        from autoclip.config import ExportSettings, HeadlineSettings
+
+        without = tmp_path / "without.mp4"
+        off = tmp_path / "off.mp4"
+
+        export.export_clip(
+            make_request(source_video, without, centre_crop(SOURCE_W, SOURCE_H, 5.0), words),
+            work_dir=tmp_path / "work-without",
+        )
+        export.export_clip(
+            make_request(
+                source_video,
+                off,
+                centre_crop(SOURCE_W, SOURCE_H, 5.0),
+                words,
+                headline_text="This should not appear",
+            ),
+            work_dir=tmp_path / "work-off",
+            settings=ExportSettings(headline=HeadlineSettings(enabled=False)),
+        )
+
+        assert _frame_signature(without, 3.0) == _frame_signature(off, 3.0)
+
+    def test_renders_with_word_captions_off(self, source_video, words, tmp_path) -> None:
+        """The headline-only path: no burned word captions, headline still
+        burns in. This is what caught the original filtergraph gating bug."""
+        plain = tmp_path / "plain.mp4"
+        headline_only = tmp_path / "headline_only.mp4"
+
+        export.export_clip(
+            make_request(
+                source_video, plain, centre_crop(SOURCE_W, SOURCE_H, 5.0), words,
+                burn_captions=False,
+            ),
+            work_dir=tmp_path / "work-plain",
+        )
+        export.export_clip(
+            make_request(
+                source_video,
+                headline_only,
+                centre_crop(SOURCE_W, SOURCE_H, 5.0),
+                words,
+                burn_captions=False,
+                headline_text="Headline with no captions",
+            ),
+            work_dir=tmp_path / "work-headline-only",
+        )
+
+        info = ffmpeg.probe(headline_only)
+        assert (info.width, info.height) == (1080, 1920)
+        top_strip = "1080:300:0:0"
+        assert _region_signature(plain, 3.0, top_strip) != _region_signature(
+            headline_only, 3.0, top_strip
+        )
+
+    def test_upper_center_position_differs_from_top(self, source_video, words, tmp_path) -> None:
+        from autoclip.config import ExportSettings, HeadlineSettings
+
+        top = tmp_path / "top.mp4"
+        upper_center = tmp_path / "upper_center.mp4"
+
+        export.export_clip(
+            make_request(
+                source_video, top, centre_crop(SOURCE_W, SOURCE_H, 5.0), words,
+                headline_text="Positioned headline",
+            ),
+            work_dir=tmp_path / "work-top",
+            settings=ExportSettings(headline=HeadlineSettings(enabled=True, position="top")),
+        )
+        export.export_clip(
+            make_request(
+                source_video, upper_center, centre_crop(SOURCE_W, SOURCE_H, 5.0), words,
+                headline_text="Positioned headline",
+            ),
+            work_dir=tmp_path / "work-upper-center",
+            settings=ExportSettings(
+                headline=HeadlineSettings(enabled=True, position="upper-center")
+            ),
+        )
+
+        very_top_strip = "1080:100:0:0"
+        assert _region_signature(top, 3.0, very_top_strip) != _region_signature(
+            upper_center, 3.0, very_top_strip
+        )
+
+    def test_output_duration_is_unaffected_by_the_overlay(
+        self, source_video, words, tmp_path
+    ) -> None:
+        """Regression class: the watermark suite has its own "-loop 1 makes
+        the render run forever" story. The headline event is bounded by an
+        explicit duration rather than an input stream, but this is the same
+        shape of thing worth proving directly rather than trusting by design."""
+        destination = tmp_path / "duration.mp4"
+
+        export.export_clip(
+            make_request(
+                source_video,
+                destination,
+                centre_crop(SOURCE_W, SOURCE_H, 5.0),
+                words,
+                headline_text="Duration check",
+            ),
+            work_dir=tmp_path / "work",
+        )
+
+        assert ffmpeg.probe(destination).duration_s == pytest.approx(5.0, abs=0.35)
+
+
 def _frame_signature(video: Path, timestamp: float) -> str:
     """Hash one frame's pixels, for comparing rendered output."""
     return _region_signature(video, timestamp, crop=None)

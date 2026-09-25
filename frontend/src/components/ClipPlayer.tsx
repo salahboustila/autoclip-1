@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { formatTimecode, type CaptionStyle, type CropPath, type Word } from '../api'
+import {
+  formatTimecode,
+  type CaptionStyle,
+  type CropPath,
+  type HeadlineSettings,
+  type Word,
+} from '../api'
 
 const VOLUME_KEY = 'autoclip.volume'
 
@@ -35,6 +41,9 @@ export function ClipPlayer({
   style,
   ratio,
   cropPath,
+  headlineText,
+  headlineEnabled = true,
+  headlineSettings,
 }: {
   src: string
   startS: number
@@ -43,6 +52,15 @@ export function ClipPlayer({
   style: CaptionStyle | undefined
   ratio: string
   cropPath?: CropPath | null
+  /** The clip's own AI-generated (or edited) headline text. Empty/undefined
+   * renders nothing, matching how export's _resolve_headline degrades. */
+  headlineText?: string
+  /** Per-clip toggle — mirrors ClipEdit.headline_enabled. */
+  headlineEnabled?: boolean
+  /** Global look-and-feel, from Settings — the headline's own equivalent of
+   * `style` for captions, just sourced from account settings instead of a
+   * per-clip preset key. */
+  headlineSettings?: HeadlineSettings
 }) {
   const video = useRef<HTMLVideoElement>(null)
   const [playing, setPlaying] = useState(false)
@@ -156,6 +174,9 @@ export function ClipPlayer({
         />
 
         <CaptionOverlay words={words} time={time} style={style} />
+        {headlineEnabled && (
+          <HeadlineOverlay text={headlineText} settings={headlineSettings} />
+        )}
 
         {!playing && (
           <div className="pointer-events-none absolute inset-0 grid place-items-center">
@@ -504,6 +525,54 @@ function CaptionOverlay({
             </span>
           )
         })}
+      </p>
+    </div>
+  )
+}
+
+/**
+ * CSS approximation of the headline overlay — same "close enough to judge
+ * position/size/color, not pixel-exact" philosophy as CaptionOverlay above.
+ *
+ * Unlike the caption groups, this shows for the whole clip rather than
+ * timing in/out with `time`, and unlike the server's own _wrap_headline
+ * (which measures an approximate character width to pick break points for
+ * libass), this lets the browser wrap the text naturally against the real
+ * rendered width — more accurate for a live preview than reproducing that
+ * heuristic — and caps visible overflow with line-clamp rather than
+ * appending it to the last line the way the real render does.
+ */
+function HeadlineOverlay({
+  text,
+  settings,
+}: {
+  text: string | undefined
+  settings: HeadlineSettings | undefined
+}) {
+  if (!settings?.enabled || !text?.trim()) return null
+
+  const topPct = settings.position === 'top' ? 5 : 16
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 flex justify-center px-[8%]"
+      style={{ top: `${topPct}%` }}
+    >
+      <p
+        className="text-center font-bold uppercase leading-[1.25]"
+        style={{
+          fontFamily: 'Anton, Impact, sans-serif',
+          fontSize: `clamp(0.7rem, ${settings.font_size_ratio * 100}cqh, 3.5rem)`,
+          color: settings.text_color,
+          backgroundColor: `rgba(0, 0, 0, ${settings.bg_opacity_pct / 100})`,
+          padding: '0.2em 0.5em',
+          display: '-webkit-box',
+          WebkitLineClamp: settings.max_lines,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}
+      >
+        {text}
       </p>
     </div>
   )

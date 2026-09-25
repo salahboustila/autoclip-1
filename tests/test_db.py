@@ -265,6 +265,67 @@ class TestTranscriptsEditsAndExports:
         assert loaded.edited_words == words
         assert loaded.caption_style == "karaoke_fill"
 
+    def test_new_clip_edit_defaults_headline_enabled_to_true(self, job: Job) -> None:
+        """A clip that has never been touched still renders its (default-on)
+        headline — enabling has to be the default, not something the user
+        must opt into per clip, per the "visible by default" requirement."""
+        clip = Clip(id=new_id(), job_id=job.id, start_s=0.0, end_s=30.0)
+        store.replace_clips(job.id, [clip])
+
+        assert store.get_clip_edit(clip.id) is None  # no row yet at all
+
+    def test_update_clip_headline_creates_the_row_if_missing(self, job: Job) -> None:
+        clip = Clip(id=new_id(), job_id=job.id, start_s=0.0, end_s=30.0)
+        store.replace_clips(job.id, [clip])
+
+        store.update_clip_headline(clip.id, headline_text="Generated headline")
+
+        loaded = store.get_clip_edit(clip.id)
+        assert loaded is not None
+        assert loaded.headline_text == "Generated headline"
+        assert loaded.headline_enabled is True  # untouched default
+
+    def test_update_clip_headline_only_changes_what_was_passed(self, job: Job) -> None:
+        """Setting just headline_enabled=False must not clobber the text, and
+        vice versa — the two are independent, unlike caption_style/ratio
+        which upsert_clip_edit always writes together."""
+        clip = Clip(id=new_id(), job_id=job.id, start_s=0.0, end_s=30.0)
+        store.replace_clips(job.id, [clip])
+        store.update_clip_headline(clip.id, headline_text="Keep this text")
+
+        store.update_clip_headline(clip.id, headline_enabled=False)
+
+        loaded = store.get_clip_edit(clip.id)
+        assert loaded.headline_text == "Keep this text"
+        assert loaded.headline_enabled is False
+
+    def test_update_clip_headline_preserves_unrelated_edit_fields(self, job: Job) -> None:
+        """A headline edit must not reset a caption_style or word edit the
+        user made earlier — the same silent-reset bug class the PUT
+        /api/settings watermark/headline merge carve-out exists to avoid."""
+        clip = Clip(id=new_id(), job_id=job.id, start_s=0.0, end_s=30.0)
+        store.replace_clips(job.id, [clip])
+        store.upsert_clip_edit(ClipEdit(clip_id=clip.id, caption_style="boxed", ratio="1:1"))
+
+        store.update_clip_headline(clip.id, headline_text="New headline")
+
+        loaded = store.get_clip_edit(clip.id)
+        assert loaded.caption_style == "boxed"
+        assert loaded.ratio == "1:1"
+        assert loaded.headline_text == "New headline"
+
+    def test_clip_edit_round_trips_headline_fields(self, job: Job) -> None:
+        clip = Clip(id=new_id(), job_id=job.id, start_s=0.0, end_s=30.0)
+        store.replace_clips(job.id, [clip])
+
+        store.upsert_clip_edit(
+            ClipEdit(clip_id=clip.id, headline_text="A headline", headline_enabled=False)
+        )
+
+        loaded = store.get_clip_edit(clip.id)
+        assert loaded.headline_text == "A headline"
+        assert loaded.headline_enabled is False
+
     def test_exports_are_listed_for_a_clip(self, job: Job) -> None:
         clip = Clip(id=new_id(), job_id=job.id, start_s=0.0, end_s=30.0)
         store.replace_clips(job.id, [clip])

@@ -218,3 +218,235 @@ class TestAssGeneration:
 
         assert path.exists()
         assert len(pysubs2.load(str(path), encoding="utf-8").events) > 0
+
+
+class TestHeadlineWrap:
+    def test_short_text_fits_on_one_line(self) -> None:
+        result = captions._wrap_headline("SHORT TEXT", max_chars_per_line=40, max_lines=3)
+
+        assert r"\N" not in result
+
+    def test_wraps_at_a_word_boundary(self) -> None:
+        result = captions._wrap_headline(
+            "ONE TWO THREE FOUR", max_chars_per_line=8, max_lines=3
+        )
+
+        # Never split a word itself, whatever the line breaks land on.
+        assert set(result.replace(r"\N", " ").split(" ")) == {"ONE", "TWO", "THREE", "FOUR"}
+
+    def test_never_exceeds_max_lines(self) -> None:
+        text = "ONE TWO THREE FOUR FIVE SIX SEVEN EIGHT NINE TEN"
+
+        result = captions._wrap_headline(text, max_chars_per_line=4, max_lines=3)
+
+        assert result.count(r"\N") <= 2  # at most 3 lines = 2 breaks
+
+    def test_overflow_words_land_on_the_last_line_rather_than_vanishing(self) -> None:
+        """No word the AI wrote is ever silently dropped, even under an
+        unreasonably tight budget — see _wrap_headline's own docstring."""
+        text = "ONE TWO THREE FOUR FIVE SIX"
+
+        result = captions._wrap_headline(text, max_chars_per_line=3, max_lines=2)
+
+        assert set(result.replace(r"\N", " ").split(" ")) == set(text.split(" "))
+
+    def test_empty_text_gives_empty_result(self) -> None:
+        assert captions._wrap_headline("", max_chars_per_line=40, max_lines=3) == ""
+
+    def test_single_long_word_is_not_split(self) -> None:
+        result = captions._wrap_headline("SUPERCALIFRAGILISTIC", max_chars_per_line=5, max_lines=3)
+
+        assert result == "SUPERCALIFRAGILISTIC"
+
+
+class TestHeadlineOverlay:
+    def test_no_headline_leaves_events_untouched(self) -> None:
+        subs = pysubs2.SSAFile()
+        subs.info["PlayResX"] = "1080"
+        subs.info["PlayResY"] = "1920"
+
+        captions.add_headline(
+            subs,
+            captions.HeadlineStyle(text=""),
+            width=1080,
+            height=1920,
+            duration_s=10.0,
+        )
+
+        assert len(subs.events) == 0
+
+    def test_adds_exactly_one_event_for_the_whole_clip_duration(self) -> None:
+        subs = pysubs2.SSAFile()
+
+        captions.add_headline(
+            subs,
+            captions.HeadlineStyle(text="A real headline"),
+            width=1080,
+            height=1920,
+            duration_s=12.5,
+        )
+
+        assert len(subs.events) == 1
+        event = subs.events[0]
+        assert event.start == 0
+        assert event.end == pysubs2.make_time(s=12.5)
+
+    def test_text_is_upper_cased(self) -> None:
+        subs = pysubs2.SSAFile()
+
+        captions.add_headline(
+            subs,
+            captions.HeadlineStyle(text="lower case words"),
+            width=1080,
+            height=1920,
+            duration_s=5.0,
+        )
+
+        assert subs.events[0].text == subs.events[0].text.upper()
+
+    def test_uses_an_opaque_border_style_for_the_background_box(self) -> None:
+        subs = pysubs2.SSAFile()
+
+        captions.add_headline(
+            subs,
+            captions.HeadlineStyle(text="Boxed headline"),
+            width=1080,
+            height=1920,
+            duration_s=5.0,
+        )
+
+        style = subs.styles[subs.events[0].style]
+        assert style.borderstyle == 3
+
+    def test_top_position_sits_closer_to_the_edge_than_upper_center(self) -> None:
+        top = pysubs2.SSAFile()
+        captions.add_headline(
+            top,
+            captions.HeadlineStyle(text="X", position="top"),
+            width=1080,
+            height=1920,
+            duration_s=5.0,
+        )
+        upper_center = pysubs2.SSAFile()
+        captions.add_headline(
+            upper_center,
+            captions.HeadlineStyle(text="X", position="upper-center"),
+            width=1080,
+            height=1920,
+            duration_s=5.0,
+        )
+
+        top_margin = top.styles[top.events[0].style].marginv
+        upper_center_margin = upper_center.styles[upper_center.events[0].style].marginv
+        assert top_margin < upper_center_margin
+
+    def test_full_opacity_and_zero_opacity_produce_different_backcolor_alpha(self) -> None:
+        opaque = pysubs2.SSAFile()
+        captions.add_headline(
+            opaque,
+            captions.HeadlineStyle(text="X", bg_opacity_pct=100.0),
+            width=1080,
+            height=1920,
+            duration_s=5.0,
+        )
+        transparent = pysubs2.SSAFile()
+        captions.add_headline(
+            transparent,
+            captions.HeadlineStyle(text="X", bg_opacity_pct=0.0),
+            width=1080,
+            height=1920,
+            duration_s=5.0,
+        )
+
+        opaque_alpha = opaque.styles[opaque.events[0].style].backcolor.a
+        transparent_alpha = transparent.styles[transparent.events[0].style].backcolor.a
+        # ASS alpha is inverted: 0 = fully opaque, 255 = fully transparent.
+        assert opaque_alpha < transparent_alpha
+
+    def test_text_colour_is_applied(self) -> None:
+        subs = pysubs2.SSAFile()
+
+        captions.add_headline(
+            subs,
+            captions.HeadlineStyle(text="X", text_color="#FF0000"),
+            width=1080,
+            height=1920,
+            duration_s=5.0,
+        )
+
+        colour = subs.styles[subs.events[0].style].primarycolor
+        assert (colour.r, colour.g, colour.b) == (255, 0, 0)
+
+    def test_headline_style_does_not_collide_with_the_caption_style_name(self) -> None:
+        """Both live in the same SSAFile when write_ass layers them together —
+        distinct style names are what keeps libass from confusing them."""
+        subs = pysubs2.SSAFile()
+        subs.styles[captions.STYLE_NAME] = pysubs2.SSAStyle()
+
+        captions.add_headline(
+            subs,
+            captions.HeadlineStyle(text="X"),
+            width=1080,
+            height=1920,
+            duration_s=5.0,
+        )
+
+        assert subs.events[0].style != captions.STYLE_NAME
+        assert captions.STYLE_NAME in subs.styles  # untouched, not overwritten
+
+
+class TestWriteAssWithHeadline:
+    @pytest.fixture
+    def words(self) -> list[Word]:
+        return evenly_spaced(["the", "quick", "brown", "fox", "jumps", "over."])
+
+    def test_headline_layers_onto_existing_caption_events(
+        self, words: list[Word], tmp_path
+    ) -> None:
+        path = captions.write_ass(
+            tmp_path / "out.ass",
+            words,
+            captions.get_style("bold_pop"),
+            width=1080,
+            height=1920,
+            headline=captions.HeadlineStyle(text="Breaking overlay news"),
+            clip_duration_s=10.0,
+        )
+
+        reloaded = pysubs2.load(str(path), encoding="utf-8")
+        # bold_pop emits one event per word (see TestAssGeneration above) plus
+        # exactly one more for the headline.
+        assert len(reloaded.events) == len(words) + 1
+
+    def test_headline_works_with_no_word_captions_at_all(self, tmp_path) -> None:
+        """Headline on, word captions off: write_ass must still produce a
+        valid file with just the one headline event, not fail on empty words."""
+        path = captions.write_ass(
+            tmp_path / "headline_only.ass",
+            [],
+            captions.get_style("bold_pop"),
+            width=1080,
+            height=1920,
+            headline=captions.HeadlineStyle(text="Headline only, no captions"),
+            clip_duration_s=8.0,
+        )
+
+        reloaded = pysubs2.load(str(path), encoding="utf-8")
+        assert len(reloaded.events) == 1
+
+    def test_omitting_headline_is_unchanged_from_before_the_feature_existed(
+        self, words: list[Word], tmp_path
+    ) -> None:
+        with_default = captions.write_ass(
+            tmp_path / "a.ass", words, captions.get_style("bold_pop"), width=1080, height=1920
+        )
+        explicit_none = captions.write_ass(
+            tmp_path / "b.ass",
+            words,
+            captions.get_style("bold_pop"),
+            width=1080,
+            height=1920,
+            headline=None,
+        )
+
+        assert with_default.read_text(encoding="utf-8") == explicit_none.read_text(encoding="utf-8")

@@ -228,14 +228,18 @@ def doctor() -> None:
             "token with [cyan]autoclip config set-secret huggingface_token[/cyan]."
         )
 
-    for missing, extra in (
+    # Distinct names from `missing` above (that one's a list[str] of filter
+    # names): reusing it as this loop's bool variable made mypy conflate the
+    # two bindings across the whole function — a false positive, but the
+    # rename is free and reads clearer regardless.
+    for dep_missing, dep_name in (
         (not deps.faster_whisper, "faster-whisper"),
         (not deps.mediapipe, "mediapipe"),
         (not deps.scenedetect, "scenedetect"),
     ):
-        if missing:
+        if dep_missing:
             remediation.append(
-                f"[cyan]{extra}[/cyan] is not installed — reinstall AutoClip's core "
+                f"[cyan]{dep_name}[/cyan] is not installed — reinstall AutoClip's core "
                 "dependencies with [cyan]uv pip install -e '.[dev]'[/cyan]."
             )
 

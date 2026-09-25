@@ -229,6 +229,33 @@ class LLMProvider(ABC):
 
         raise AssertionError("unreachable")  # pragma: no cover
 
+    async def complete_json(
+        self, system: str, user: str, config: DetectionConfig, *, retry_on_invalid: bool = True
+    ) -> dict[str, Any]:
+        """Send a prompt and parse the JSON object the model returns.
+
+        The general-purpose sibling of :meth:`detect_highlights`: same retry
+        and JSON-repair behaviour, but for any caller that wants structured
+        data back without the clip-candidate-specific validation layered on
+        top of it (headline generation is the first such caller).
+        """
+        raw = await self._complete_resilient(system, user, config)
+        try:
+            return extract_json_object(raw)
+        except ValueError as first_error:
+            if not retry_on_invalid:
+                raise
+            log.warning("%s returned invalid JSON; retrying with feedback.", self.name)
+            repair = (
+                f"{user}\n\n"
+                "Your previous response was not valid JSON.\n"
+                f"Error: {first_error}\n\n"
+                "Respond again with ONLY the corrected JSON object. No prose, no "
+                "markdown fences."
+            )
+            raw = await self._complete_resilient(system, repair, config)
+            return extract_json_object(raw)
+
     async def detect_highlights(
         self, window: TranscriptWindow, config: DetectionConfig
     ) -> ClipCandidates:

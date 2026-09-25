@@ -114,6 +114,29 @@ class WatermarkSettings(BaseModel):
         return paths.watermarks_dir() / self.filename
 
 
+class HeadlineSettings(BaseModel):
+    """How the AI-generated headline is drawn at the top of every clip.
+
+    The headline *text* itself is per-clip, generated and stored alongside the
+    clip (see ``ClipEdit.headline_text``) — this model only holds the shared
+    look-and-feel, applied uniformly, the same split ``WatermarkSettings``
+    makes between "the asset" and "how it's drawn".
+    """
+
+    #: Master switch. Off skips generation entirely during the pipeline run,
+    #: so no LLM calls are made for it and no cost is incurred.
+    enabled: bool = True
+    #: Font size as a fraction of frame height — same convention as
+    #: CaptionStyle.size_ratio, so it scales the same way across ratios.
+    font_size_ratio: float = Field(default=0.052, gt=0, le=0.15)
+    position: Literal["top", "upper-center"] = "top"
+    bg_opacity_pct: float = Field(default=70.0, ge=0, le=100)
+    text_color: str = "#FFFFFF"
+    #: Wrap onto at most this many lines before shrinking no further —
+    #: matches the spec's "keep it inside the safe area" requirement.
+    max_lines: int = Field(default=3, ge=1, le=4)
+
+
 class ExportSettings(BaseModel):
     ratio: Literal["9:16", "1:1", "16:9"] = "9:16"
     caption_style: str = "bold_pop"
@@ -139,6 +162,7 @@ class ExportSettings(BaseModel):
     #: Also write a .srt sidecar next to each exported clip.
     write_srt: bool = False
     watermark: WatermarkSettings = Field(default_factory=WatermarkSettings)
+    headline: HeadlineSettings = Field(default_factory=HeadlineSettings)
 
 
 class Settings(BaseModel):

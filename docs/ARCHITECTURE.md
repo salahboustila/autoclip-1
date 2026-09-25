@@ -62,7 +62,8 @@ backend/autoclip/
     ├── transcribe.py faster-whisper + WhisperX diarization
     ├── boundaries.py sentence snap, duration clamp, silence alignment
     ├── highlights.py windowing, dedupe, ranking
-    ├── captions.py   ASS generation and the four presets
+    ├── headlines.py  one AI headline per clip, layered onto the captions ASS
+    ├── captions.py   ASS generation, the four caption presets, and the headline overlay
     ├── export.py     the render
     ├── runner.py     stage orchestration and resume
     └── reframe/      scenes, faces, tracker, speaker, smoothing, croppath
@@ -125,6 +126,32 @@ Two checks look redundant and are not:
 Both are probed functionally, and `autoclip doctor` reports what it actually
 tried.
 
+### The AI headline is a sub-step of `highlights`, not its own stage
+
+Generating a headline needs an LLM call per clip, which only makes sense
+*after* `highlights` has decided what the clips are — but it doesn't need a
+`Stage` of its own. A new stage means a new `STAGE_WEIGHTS` entry, a new row
+in the frontend's stage list, and a resume boundary nothing else needs. It's
+folded into the tail end of `_stage_highlights` instead, reusing the provider
+`highlights` already built and authenticated. The one place this shows up is
+the live progress message, which briefly reads "Writing headlines" near the
+end of the "Finding highlights" stage rather than getting its own row.
+
+It also reuses `detect_highlights`'s JSON-in-JSON-out contract rather than
+adding a second kind of provider call: `LLMProvider.complete_json` is
+`detect_highlights`'s retry/repair loop with the clip-candidate-specific
+validation lifted out, so a one-field `{"headline": "..."}` schema costs
+nothing new to add and every existing provider adapter supports it for free.
+
+### The headline overlay reuses the caption ASS file, not a second filtergraph stage
+
+`add_headline` appends one more static, full-duration event to the same
+`SSAFile` the word captions already populate — same libass burn-in pass, same
+font directory, no new `-filter_complex` stage the way the watermark's image
+overlay needed one. The trade-off: the headline can only look like what ASS
+styling can express (a box, a colour, an alignment), which is enough for the
+"large bold text on a dark box" look it's after and nothing more elaborate.
+
 ### Compute type follows the hardware
 
 Pre-Volta CUDA devices have no fp16 tensor cores, so `float16` inference is no
@@ -143,7 +170,7 @@ silently diverges their schema from a fresh install's.
 | `jobs`       | pipeline runs, status, progress, settings snapshot |
 | `transcripts`| pointer to the transcript JSON, model, diarization  |
 | `clips`      | detected clips with boundaries and scores           |
-| `clip_edits` | user caption edits, style, ratio                    |
+| `clip_edits` | user caption edits, style, ratio, headline text/toggle |
 | `exports`    | rendered files                                      |
 
 ## Provider abstraction

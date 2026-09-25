@@ -31,6 +31,11 @@ being validated against a fixed golden video set — see
   support, and provider reachability, and explains what to do about each.
 - **End-to-end test** against real media, covering every stage with only the
   language model's answer scripted.
+- **AI Clip Headlines** — a short, attention-grabbing headline generated per
+  clip from its own transcript and burned in at the top of the frame,
+  reusing the same LLM providers and ASS caption pipeline. Freely editable
+  per clip, with an on/off toggle that doesn't lose the generated text, and
+  account-wide position/size/colour/opacity/line-count controls in Settings.
 
 ### Notable fixes during development
 

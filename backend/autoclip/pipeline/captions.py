@@ -236,6 +236,152 @@ def group_words(
 
 
 # --------------------------------------------------------------------------
+# Headline overlay
+#
+# A deliberately smaller sibling of the caption machinery above: one static
+# line (or a few), shown for the clip's whole duration, no per-word grouping
+# or animation. It shares the same ASS file and the same libass burn-in pass
+# as the captions — see add_headline — so a headline costs nothing extra in
+# the filtergraph or the render.
+# --------------------------------------------------------------------------
+
+
+@dataclass
+class HeadlineStyle:
+    """Rendering knobs for the AI-generated headline overlay.
+
+    Built by the export stage from ``HeadlineSettings`` (global look-and-feel)
+    plus the clip's own stored headline text — see config.HeadlineSettings and
+    db.models.ClipEdit.headline_text.
+    """
+
+    text: str
+    font: str = "Anton"
+    font_file: str = "Anton-Regular.ttf"
+    size_ratio: float = 0.052
+    text_color: str = "#FFFFFF"
+    #: "top" | "upper-center"
+    position: str = "top"
+    bg_opacity_pct: float = 70.0
+    max_lines: int = 3
+
+    @property
+    def font_path(self) -> Path:
+        return FONT_DIR / self.font_file
+
+
+#: Fraction of frame height between the top edge and the headline, per
+#: position. "top" sits just inside the safe area; "upper-center" drops
+#: further down, clear of wherever a phone's own status bar or notch overlay
+#: would sit once the clip is posted.
+_HEADLINE_MARGIN_V_RATIO = {"top": 0.05, "upper-center": 0.16}
+#: Fraction of frame *width* kept clear on each side, so a wrapped line never
+#: reaches the edge — the "keep it inside the safe area" requirement.
+_HEADLINE_SIDE_MARGIN_RATIO = 0.08
+#: Condensed uppercase glyphs in Anton run narrower than their point size.
+#: This estimates width only to decide where to *break* lines — libass does
+#: the actual rendering — so erring low means wrapping a little early rather
+#: than a line reaching past the safe margin.
+_HEADLINE_CHAR_WIDTH_FACTOR = 0.62
+
+
+def _wrap_headline(text: str, *, max_chars_per_line: int, max_lines: int) -> str:
+    r"""Greedy word-wrap into at most ``max_lines`` lines, joined with ``\N``.
+
+    Words that still don't fit once the line budget is used are appended to
+    the final line rather than dropped: the ten-word cap on generated
+    headlines (see pipeline/headlines.py) makes that a rare, mild overflow
+    rather than silently losing something the AI wrote and the viewer never
+    sees mentioned anywhere on screen.
+    """
+    words = text.split()
+    if not words:
+        return ""
+
+    lines: list[str] = []
+    current = words[0]
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        if len(candidate) <= max_chars_per_line or len(lines) >= max_lines - 1:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+
+    if len(lines) > max_lines:
+        head, overflow = lines[:max_lines], lines[max_lines:]
+        head[-1] = " ".join([head[-1], *overflow])
+        lines = head
+
+    return r"\N".join(lines)
+
+
+def add_headline(
+    subs: pysubs2.SSAFile,
+    style: HeadlineStyle,
+    *,
+    width: int,
+    height: int,
+    duration_s: float,
+) -> None:
+    """Append a static, full-duration headline event to an existing ASS file.
+
+    Mutates ``subs`` in place so it layers onto whatever caption events
+    :func:`write_ass` already built — including an otherwise-empty file, when
+    word captions are off but the headline is on — so one filtergraph pass
+    and one libass call burns in both together.
+
+    Not positioned to dynamically dodge a speaker's face: the reframe stage
+    already keeps the subject roughly centred rather than pinned to the very
+    top edge, so a top-anchored headline avoids it as a structural consequence
+    of how vertical reframing already works, without per-frame face tracking
+    here as well.
+    """
+    text = style.text.strip()
+    if not text:
+        return
+
+    style_name = f"{STYLE_NAME}Headline"
+    scale = height / REFERENCE_HEIGHT
+    fontsize = round(height * style.size_ratio)
+
+    ass_style = pysubs2.SSAStyle()
+    ass_style.fontname = style.font
+    ass_style.fontsize = fontsize
+    ass_style.primarycolor = hex_to_ass(style.text_color)
+    ass_style.outlinecolor = hex_to_ass("#000000")
+    box_alpha = round(255 * (1 - max(0.0, min(100.0, style.bg_opacity_pct)) / 100))
+    ass_style.backcolor = hex_to_ass("#000000", alpha=box_alpha)
+    ass_style.bold = True
+    ass_style.outline = 2.0 * scale
+    # BorderStyle 3 draws an opaque (or, here, semi-transparent) box using
+    # backcolor instead of an outline — same convention CaptionStyle.boxed uses.
+    ass_style.borderstyle = 3
+    ass_style.alignment = pysubs2.Alignment.TOP_CENTER
+    ass_style.marginv = round(height * _HEADLINE_MARGIN_V_RATIO.get(style.position, 0.05))
+    side_margin = round(width * _HEADLINE_SIDE_MARGIN_RATIO)
+    ass_style.marginl = ass_style.marginr = side_margin
+    subs.styles[style_name] = ass_style
+
+    usable_width = max(1, width - 2 * side_margin)
+    char_width = max(1, round(fontsize * _HEADLINE_CHAR_WIDTH_FACTOR))
+    max_chars_per_line = max(4, usable_width // char_width)
+    wrapped = _wrap_headline(
+        text.upper(), max_chars_per_line=max_chars_per_line, max_lines=style.max_lines
+    )
+
+    subs.events.append(
+        pysubs2.SSAEvent(
+            start=pysubs2.make_time(s=0),
+            end=pysubs2.make_time(s=max(0.0, duration_s)),
+            text=wrapped,
+            style=style_name,
+        )
+    )
+
+
+# --------------------------------------------------------------------------
 # ASS generation
 # --------------------------------------------------------------------------
 
@@ -376,9 +522,19 @@ def write_ass(
     width: int,
     height: int,
     time_offset_s: float = 0.0,
+    headline: HeadlineStyle | None = None,
+    clip_duration_s: float = 0.0,
 ) -> Path:
-    """Render captions to an .ass file and return its path."""
+    """Render captions (and, if given, the headline overlay) to an .ass file.
+
+    ``headline`` layers onto the same file rather than needing a second
+    filtergraph pass — see :func:`add_headline`. Works even when ``words`` is
+    empty (headline on, word captions off): :func:`build_ass` still produces
+    a valid, empty-of-events subtitle file for it to attach to.
+    """
     subs = build_ass(words, style, width=width, height=height, time_offset_s=time_offset_s)
+    if headline is not None:
+        add_headline(subs, headline, width=width, height=height, duration_s=clip_duration_s)
     path.parent.mkdir(parents=True, exist_ok=True)
     subs.save(str(path), encoding="utf-8")
     return path

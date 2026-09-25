@@ -25,6 +25,7 @@ from .schemas import (
     ClipPatchIn,
     ExportOut,
     ExportRequestIn,
+    HeadlinePatchIn,
     WordOut,
 )
 
@@ -168,6 +169,29 @@ async def patch_captions(clip_id: str, payload: CaptionPatchIn) -> ClipOut:
     return await asyncio.to_thread(_clip_out, clip)
 
 
+@router.patch("/clips/{clip_id}/headline", response_model=ClipOut)
+async def patch_headline(clip_id: str, payload: HeadlinePatchIn) -> ClipOut:
+    """Edit a clip's headline text, or its per-clip enable/disable toggle.
+
+    Either field alone is a valid request — editing the text doesn't require
+    also resending whether it's enabled, and vice versa; only what's actually
+    provided is changed. The next export (automatic retry or manual) picks up
+    the new value, since both read it fresh from clip_edits.
+    """
+    clip = await asyncio.to_thread(store.get_clip, clip_id)
+    if clip is None:
+        raise HTTPException(status_code=404, detail="Clip not found.")
+
+    await asyncio.to_thread(
+        store.update_clip_headline,
+        clip_id,
+        headline_text=payload.headline_text,
+        headline_enabled=payload.headline_enabled,
+    )
+
+    return await asyncio.to_thread(_clip_out, clip)
+
+
 @router.post("/clips/{clip_id}/export", response_model=ExportOut, status_code=201)
 async def export_clip(clip_id: str, payload: ExportRequestIn) -> ExportOut:
     """Render one clip and return its download link."""
@@ -202,6 +226,9 @@ async def export_clip(clip_id: str, payload: ExportRequestIn) -> ExportOut:
         / export_module.output_filename(clip.title or f"clip-{clip.rank}", payload.ratio)
     )
 
+    edit = await asyncio.to_thread(store.get_clip_edit, clip_id)
+    headline_text = edit.headline_text if edit and edit.headline_enabled else ""
+
     request = export_module.ExportRequest(
         source=Path(source.path),
         destination=destination,
@@ -211,6 +238,7 @@ async def export_clip(clip_id: str, payload: ExportRequestIn) -> ExportOut:
         words=words,
         style=style,
         ratio=payload.ratio,
+        headline_text=headline_text,
     )
 
     try:

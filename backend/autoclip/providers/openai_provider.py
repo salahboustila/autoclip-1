@@ -62,7 +62,10 @@ class OpenAIProvider(LLMProvider):
         return AsyncOpenAI(**kwargs)
 
     def _is_local(self) -> bool:
-        return bool(self.base_url) and (
+        # Checked directly rather than via bool(self.base_url) and (...): that
+        # wraps the value in a fresh bool, which breaks mypy's narrowing of
+        # self.base_url from str | None to str for the "in" checks below.
+        return self.base_url is not None and (
             "localhost" in self.base_url or "127.0.0.1" in self.base_url
         )
 

@@ -63,19 +63,22 @@ async def put_settings(payload: SettingsIn) -> SettingsOut:
         if section in updates:
             current = getattr(settings, section)
             section_updates = updates[section]
-            if section == "export" and "watermark" in section_updates:
-                # `watermark` is itself a nested model, and the dict merge
-                # below only replaces whole top-level keys of `export` — so a
-                # request that sends just e.g. {"position": "top-left"}
-                # without every other watermark field would otherwise reset
-                # the rest to their defaults, silently turning an uploaded,
-                # enabled watermark back off. Merge it against the current
-                # values first, the same way "export" is merged against
-                # `settings` as a whole below.
-                section_updates = {
-                    **section_updates,
-                    "watermark": current.watermark.model_dump() | section_updates["watermark"],
-                }
+            if section == "export":
+                # `watermark` and `headline` are themselves nested models, and
+                # the dict merge below only replaces whole top-level keys of
+                # `export` — so a request that sends just e.g.
+                # {"headline": {"bg_opacity_pct": 50}} without every other
+                # headline field would otherwise reset the rest to their
+                # defaults, silently turning an enabled headline back off.
+                # Merge each nested section against its current values first,
+                # the same way "export" is merged against `settings` below.
+                for nested in ("watermark", "headline"):
+                    if nested in section_updates:
+                        section_updates = {
+                            **section_updates,
+                            nested: getattr(current, nested).model_dump()
+                            | section_updates[nested],
+                        }
             try:
                 setattr(
                     settings,

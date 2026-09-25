@@ -16,11 +16,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..config import ExportSettings, WatermarkSettings
+from ..config import ExportSettings, HeadlineSettings, WatermarkSettings
 from ..system import report
 from . import captions as captions_module
 from . import ffmpeg
-from .captions import CaptionStyle
+from .captions import CaptionStyle, HeadlineStyle
 from .reframe.croppath import CropPath, segment_crop_filter
 from .transcript import Word
 
@@ -63,6 +63,10 @@ class ExportRequest:
     style: CaptionStyle
     ratio: str = "9:16"
     burn_captions: bool = True
+    #: Resolved by the caller (already accounting for the global
+    #: HeadlineSettings.enabled switch and the clip's own per-clip toggle) —
+    #: empty means "render no headline for this clip", regardless of why.
+    headline_text: str = ""
 
     @property
     def duration_s(self) -> float:
@@ -154,7 +158,13 @@ def build_video_filtergraph(
     # label depends on whether there's another stage still to come.
     base_label = "[vpre]" if watermark is not None else "[vout]"
 
-    if request.burn_captions and subtitle_name is not None:
+    if subtitle_name is not None:
+        # export_clip is the single place that decides whether an .ass file
+        # exists at all — for word captions, the headline, or both — so its
+        # presence alone is the right signal here. (Previously this also
+        # re-checked request.burn_captions, which meant a headline-only clip
+        # with captions off silently lost its headline too: subtitle_name
+        # would be set, but this condition still failed.)
         # Bare relative names — ffmpeg runs with its cwd set to the render
         # workspace, so there is nothing here that needs escaping.
         parts.append(f"{current}ass=filename={subtitle_name}:fontsdir={fonts_name}{base_label}")
@@ -233,6 +243,28 @@ def _resolve_watermark(watermark: WatermarkSettings) -> Path | None:
         log.warning("Watermark is enabled but %s is missing; exporting without it.", path)
         return None
     return path
+
+
+def _resolve_headline(settings: HeadlineSettings, text: str) -> HeadlineStyle | None:
+    """The headline style to render, or None if there isn't one to use.
+
+    ``text`` already reflects the caller's enabled/disabled decision (the
+    global HeadlineSettings.enabled switch and the clip's own per-clip
+    toggle) — see ExportRequest.headline_text. This only covers the one
+    additional way "off" can happen: the setting *object* itself disabled,
+    which matters for the manual re-export path in api/clips.py, where the
+    text is read straight from storage without re-checking the global switch.
+    """
+    if not settings.enabled or not text.strip():
+        return None
+    return HeadlineStyle(
+        text=text,
+        text_color=settings.text_color,
+        size_ratio=settings.font_size_ratio,
+        position=settings.position,
+        bg_opacity_pct=settings.bg_opacity_pct,
+        max_lines=settings.max_lines,
+    )
 
 
 def _fit_chain(source_label: str, index: int, out_w: int, out_h: int) -> list[str]:
@@ -338,18 +370,23 @@ def export_clip(
     watermark_path = _resolve_watermark(settings.watermark)
     watermark = settings.watermark if watermark_path is not None else None
 
+    headline = _resolve_headline(settings.headline, request.headline_text)
+
     subtitle_name: str | None = None
     fonts_name = "fonts"
     render_cwd: Path | None = None
 
-    if request.burn_captions and request.words:
+    burn_words = request.burn_captions and request.words
+    if burn_words or headline is not None:
         ass_path = captions_module.write_ass(
             workspace / "captions.ass",
-            request.words,
+            request.words if burn_words else [],
             request.style,
             width=out_w,
             height=out_h,
             time_offset_s=request.start_s,
+            headline=headline,
+            clip_duration_s=request.duration_s,
         )
         render_cwd, subtitle_name, fonts_name = ffmpeg.relative_filter_workspace(
             ass_path, captions_module.FONT_DIR

@@ -163,13 +163,18 @@ def update_job(
         if value is not None:
             fields[name] = value
 
-    for name, value in (
+    for nullable_name, nullable_value in (
         ("error", error),
         ("started_at", started_at),
         ("finished_at", finished_at),
     ):
-        if not isinstance(value, _Unset):
-            fields[name] = value
+        # Distinct loop-variable names from the block above: reusing `name`/
+        # `value` across two sibling for-loops in one function made mypy
+        # conflate their types (the first loop's `float` from `progress`
+        # leaking into this one's `str | None | _Unset`), which is a false
+        # positive — this dict's values are `Any` regardless.
+        if not isinstance(nullable_value, _Unset):
+            fields[nullable_name] = nullable_value
 
     assignments = ", ".join(f"{name} = ?" for name in fields)
     with connection() as conn:
@@ -329,12 +334,15 @@ def upsert_clip_edit(edit: ClipEdit) -> ClipEdit:
     with connection() as conn:
         conn.execute(
             """
-            INSERT INTO clip_edits (clip_id, edited_words_json, caption_style, ratio, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO clip_edits (clip_id, edited_words_json, caption_style, ratio,
+                                    headline_text, headline_enabled, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(clip_id) DO UPDATE SET
                 edited_words_json = excluded.edited_words_json,
                 caption_style = excluded.caption_style,
                 ratio = excluded.ratio,
+                headline_text = excluded.headline_text,
+                headline_enabled = excluded.headline_enabled,
                 updated_at = excluded.updated_at
             """,
             (
@@ -342,10 +350,40 @@ def upsert_clip_edit(edit: ClipEdit) -> ClipEdit:
                 json.dumps(edit.edited_words) if edit.edited_words is not None else None,
                 edit.caption_style,
                 edit.ratio,
+                edit.headline_text,
+                int(edit.headline_enabled),
                 utcnow(),
             ),
         )
     return edit
+
+
+def update_clip_headline(
+    clip_id: str, *, headline_text: str | None = None, headline_enabled: bool | None = None
+) -> ClipEdit:
+    """Patch just the headline fields of a clip's edit row, creating it if needed.
+
+    A thin partial-update wrapper around :func:`upsert_clip_edit`: the caller
+    (pipeline generation, or a manual edit in the Review UI) rarely has — or
+    should overwrite — the clip's caption/ratio choices, so this reads the
+    existing row first and only changes what was actually passed.
+    """
+    existing = get_clip_edit(clip_id)
+    edit = ClipEdit(
+        clip_id=clip_id,
+        edited_words=existing.edited_words if existing else None,
+        caption_style=existing.caption_style if existing else "bold_pop",
+        ratio=existing.ratio if existing else "9:16",
+        headline_text=(
+            headline_text if headline_text is not None
+            else (existing.headline_text if existing else "")
+        ),
+        headline_enabled=(
+            headline_enabled if headline_enabled is not None
+            else (existing.headline_enabled if existing else True)
+        ),
+    )
+    return upsert_clip_edit(edit)
 
 
 def get_clip_edit(clip_id: str) -> ClipEdit | None:

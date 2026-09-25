@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import {
   api,
+  type HeadlinePosition,
   type ProviderStatus,
   type Settings as SettingsData,
   type SystemStatus,
@@ -15,6 +16,11 @@ const WATERMARK_POSITIONS: { value: WatermarkPosition; label: string }[] = [
   { value: 'center', label: 'Center' },
   { value: 'bottom-left', label: 'Bottom left' },
   { value: 'bottom-right', label: 'Bottom right' },
+]
+
+const HEADLINE_POSITIONS: { value: HeadlinePosition; label: string }[] = [
+  { value: 'top', label: 'Top' },
+  { value: 'upper-center', label: 'Upper center' },
 ]
 
 const SECRET_LABELS: Record<string, string> = {
@@ -69,6 +75,14 @@ export function Settings() {
     if (!settings) return
     return patch({
       export: { ...settings.export, watermark: { ...settings.export.watermark, ...update } },
+    })
+  }
+
+  /** Same spreading trick as patchWatermark, for the headline's own fields. */
+  const patchHeadlineSettings = (update: Partial<SettingsData['export']['headline']>) => {
+    if (!settings) return
+    return patch({
+      export: { ...settings.export, headline: { ...settings.export.headline, ...update } },
     })
   }
 
@@ -447,6 +461,118 @@ export function Settings() {
         </div>
       </Section>
 
+      <Section
+        title="AI headline"
+        note="A short, AI-written headline burned in at the top of every exported clip — generated from each clip's own transcript, freely editable per clip in Review."
+      >
+        <div className="grid gap-8 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="space-y-6">
+            <label className="flex items-start gap-3 text-sm text-ink-200">
+              <input
+                type="checkbox"
+                checked={settings.export.headline.enabled}
+                onChange={(e) => patchHeadlineSettings({ enabled: e.target.checked })}
+                className="mt-0.5 size-4 accent-sodium-500"
+              />
+              <span>
+                Generate a headline for every new clip
+                <span className="mt-1 block text-xs text-ink-500">
+                  Off skips the AI call entirely during processing — no extra cost, no
+                  headlines. Clips already generated keep whatever text they have.
+                </span>
+              </span>
+            </label>
+
+            <div>
+              <span className="eyebrow">Position</span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {HEADLINE_POSITIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => patchHeadlineSettings({ position: option.value })}
+                    className={[
+                      'btn',
+                      option.value === settings.export.headline.position
+                        ? 'btn-primary'
+                        : 'btn-ghost',
+                    ].join(' ')}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <PercentSlider
+                label="Font size"
+                hint="Scales with the exported video's height."
+                value={Math.round(settings.export.headline.font_size_ratio * 100)}
+                min={2}
+                max={15}
+                onCommit={(value) => patchHeadlineSettings({ font_size_ratio: value / 100 })}
+              />
+              <PercentSlider
+                label="Background opacity"
+                value={settings.export.headline.bg_opacity_pct}
+                min={0}
+                max={100}
+                onCommit={(value) => patchHeadlineSettings({ bg_opacity_pct: value })}
+              />
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <label className="block">
+                <span className="eyebrow">Text color</span>
+                <div className="mt-1.5 flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={settings.export.headline.text_color}
+                    onChange={(e) => patchHeadlineSettings({ text_color: e.target.value })}
+                    className="h-9 w-12 cursor-pointer border border-ink-700 bg-transparent p-0.5"
+                  />
+                  <span className="numeric text-sm text-ink-300">
+                    {settings.export.headline.text_color}
+                  </span>
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="eyebrow">Max lines</span>
+                <select
+                  className="field mt-1 cursor-pointer text-sm"
+                  value={settings.export.headline.max_lines}
+                  onChange={(e) =>
+                    patchHeadlineSettings({ max_lines: Number(e.target.value) })
+                  }
+                >
+                  {[1, 2, 3, 4].map((n) => (
+                    <option key={n} value={n} className="bg-ink-850">
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <span className="eyebrow">Preview</span>
+            <div className="mt-2">
+              <HeadlinePreview
+                text="Dana White knew streamers would take over UFC?!"
+                position={settings.export.headline.position}
+                fontSizeRatio={settings.export.headline.font_size_ratio}
+                bgOpacityPct={settings.export.headline.bg_opacity_pct}
+                textColor={settings.export.headline.text_color}
+                maxLines={settings.export.headline.max_lines}
+              />
+            </div>
+          </div>
+        </div>
+      </Section>
+
       {system && (
         <Section title="This machine">
           <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
@@ -654,6 +780,64 @@ function WatermarkPreview({
       {imageUrl && (
         <img src={imageUrl} alt="Watermark placement preview" style={placement} className="pointer-events-none" />
       )}
+    </div>
+  )
+}
+
+/** A mock 9:16 frame with sample text at the configured position/color/opacity
+ * — the same margin conventions pipeline/captions.py's add_headline uses, so
+ * this is a genuine preview of placement, not just a mockup. Font size is a
+ * fixed value here rather than derived from fontSizeRatio: this box is far
+ * smaller than a real 1080-wide export, so an exact size match would either
+ * be illegibly tiny or need container-query plumbing this static preview
+ * doesn't otherwise need. The per-clip player in Review gets the real size. */
+function HeadlinePreview({
+  text,
+  position,
+  fontSizeRatio: _fontSizeRatio,
+  bgOpacityPct,
+  textColor,
+  maxLines,
+}: {
+  text: string
+  position: HeadlinePosition
+  fontSizeRatio: number
+  bgOpacityPct: number
+  textColor: string
+  maxLines: number
+}) {
+  const words = text.toUpperCase().split(' ')
+  const perLine = Math.max(1, Math.ceil(words.length / maxLines))
+  const lines: string[] = []
+  for (let i = 0; i < words.length; i += perLine) {
+    lines.push(words.slice(i, i + perLine).join(' '))
+  }
+  const shown = lines.slice(0, maxLines)
+
+  return (
+    <div className="relative aspect-[9/16] w-36 overflow-hidden rounded-[var(--radius-field)] border border-ink-800 bg-gradient-to-br from-ink-850 to-ink-900">
+      <span className="absolute inset-0 grid place-items-center px-3 text-center text-[0.65rem] leading-snug text-ink-700">
+        9:16 frame
+      </span>
+      <div
+        className="absolute inset-x-[8%] text-center"
+        style={{ top: position === 'top' ? '5%' : '16%' }}
+      >
+        <p
+          className="inline-block px-1.5 py-1 text-[0.5625rem] font-bold leading-[1.25]"
+          style={{
+            fontFamily: 'Anton, Impact, sans-serif',
+            color: textColor,
+            backgroundColor: `rgba(0, 0, 0, ${bgOpacityPct / 100})`,
+          }}
+        >
+          {shown.map((line, index) => (
+            <span key={index} className="block">
+              {line}
+            </span>
+          ))}
+        </p>
+      </div>
     </div>
   )
 }

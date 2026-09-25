@@ -186,6 +186,69 @@ class TestSettings:
         assert watermark["filename"] == "watermark.png"
         assert watermark["opacity_pct"] == 80.0
 
+    def test_headline_rides_along_as_part_of_export_settings(self, client: TestClient) -> None:
+        body = client.get("/api/settings").json()
+        assert body["export"]["headline"] == {
+            "enabled": True,
+            "font_size_ratio": 0.052,
+            "position": "top",
+            "bg_opacity_pct": 70.0,
+            "text_color": "#FFFFFF",
+            "max_lines": 3,
+        }
+
+        response = client.put(
+            "/api/settings",
+            json={"export": {"headline": {"position": "upper-center", "max_lines": 2}}},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["export"]["headline"]["position"] == "upper-center"
+        assert response.json()["export"]["ratio"] == "9:16"
+
+    def test_a_partial_headline_update_does_not_reset_the_rest_of_it(
+        self, client: TestClient
+    ) -> None:
+        # The same nested-model merge bug class watermark already guards
+        # against (see the watermark test right above this one) — this is the
+        # regression test proving the carve-out was generalised, not just
+        # duplicated for one setting.
+        client.put(
+            "/api/settings",
+            json={"export": {"headline": {"bg_opacity_pct": 40.0, "text_color": "#00FF00"}}},
+        )
+
+        response = client.put(
+            "/api/settings", json={"export": {"headline": {"position": "upper-center"}}}
+        )
+
+        headline = response.json()["export"]["headline"]
+        assert headline["position"] == "upper-center"
+        assert headline["bg_opacity_pct"] == 40.0  # not reset to the 70.0 default
+        assert headline["text_color"] == "#00FF00"  # not reset to the #FFFFFF default
+
+    def test_disabling_headline_globally_is_persisted(self, client: TestClient) -> None:
+        response = client.put(
+            "/api/settings", json={"export": {"headline": {"enabled": False}}}
+        )
+
+        assert response.json()["export"]["headline"]["enabled"] is False
+        assert client.get("/api/settings").json()["export"]["headline"]["enabled"] is False
+
+    def test_setting_both_watermark_and_headline_in_one_request_touches_neither_others_fields(
+        self, client: TestClient
+    ) -> None:
+        """Both nested sections go through the same loop in put_settings — this
+        proves updating one doesn't clobber a change already made to the other."""
+        client.put("/api/settings", json={"export": {"watermark": {"scale_pct": 30.0}}})
+
+        response = client.put(
+            "/api/settings", json={"export": {"headline": {"max_lines": 1}}}
+        )
+
+        assert response.json()["export"]["headline"]["max_lines"] == 1
+        assert response.json()["export"]["watermark"]["scale_pct"] == 30.0
+
 
 class TestWatermark:
     def test_upload_stores_the_image_and_switches_it_on(self, client: TestClient) -> None:
@@ -462,6 +525,66 @@ class TestClips:
         )
 
         assert response.status_code == 400
+
+    def test_clip_out_has_headline_defaults_before_any_edit(
+        self, client: TestClient, job_with_clips: Job
+    ) -> None:
+        clip = client.get(f"/api/jobs/{job_with_clips.id}/clips").json()[0]
+
+        assert clip["headline_text"] == ""
+        assert clip["headline_enabled"] is True
+
+    def test_headline_text_is_persisted(self, client: TestClient, job_with_clips: Job) -> None:
+        clip_id = client.get(f"/api/jobs/{job_with_clips.id}/clips").json()[0]["id"]
+
+        response = client.patch(
+            f"/api/clips/{clip_id}/headline", json={"headline_text": "Edited by hand"}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["headline_text"] == "Edited by hand"
+        # Round-trips through a fresh GET too, not just the PATCH response.
+        assert client.get(f"/api/clips/{clip_id}").json()["headline_text"] == "Edited by hand"
+
+    def test_headline_can_be_disabled_per_clip(
+        self, client: TestClient, job_with_clips: Job
+    ) -> None:
+        clip_id = client.get(f"/api/jobs/{job_with_clips.id}/clips").json()[0]["id"]
+        client.patch(f"/api/clips/{clip_id}/headline", json={"headline_text": "Some headline"})
+
+        response = client.patch(
+            f"/api/clips/{clip_id}/headline", json={"headline_enabled": False}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["headline_enabled"] is False
+        # Disabling must not have cleared the text underneath it.
+        assert response.json()["headline_text"] == "Some headline"
+
+    def test_headline_patch_with_only_enabled_does_not_touch_existing_text(
+        self, client: TestClient, job_with_clips: Job
+    ) -> None:
+        clip_id = client.get(f"/api/jobs/{job_with_clips.id}/clips").json()[0]["id"]
+        client.patch(f"/api/clips/{clip_id}/headline", json={"headline_text": "Original"})
+
+        client.patch(f"/api/clips/{clip_id}/headline", json={"headline_enabled": True})
+
+        assert client.get(f"/api/clips/{clip_id}").json()["headline_text"] == "Original"
+
+    def test_headline_text_can_be_cleared_to_empty(
+        self, client: TestClient, job_with_clips: Job
+    ) -> None:
+        clip_id = client.get(f"/api/jobs/{job_with_clips.id}/clips").json()[0]["id"]
+        client.patch(f"/api/clips/{clip_id}/headline", json={"headline_text": "Something"})
+
+        response = client.patch(f"/api/clips/{clip_id}/headline", json={"headline_text": ""})
+
+        assert response.json()["headline_text"] == ""
+
+    def test_missing_clip_headline_patch_is_404(self, client: TestClient) -> None:
+        response = client.patch("/api/clips/nope/headline", json={"headline_text": "x"})
+
+        assert response.status_code == 404
 
     def test_missing_clip_is_404(self, client: TestClient) -> None:
         assert client.get("/api/clips/nope").status_code == 404
