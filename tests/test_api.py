@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from autoclip import app as app_module
@@ -68,6 +69,19 @@ class TestHealthAndSystem:
         # The SPA catch-all must never swallow a mistyped API path — that turns
         # a clear 404 into an HTML page the client can't parse.
         assert client.get("/api/does-not-exist").status_code == 404
+
+    def test_spa_never_serves_files_outside_the_build(self, client: TestClient) -> None:
+        # The catch-all joins the URL onto the build directory; `..` or a
+        # leading slash must not walk out of it. app.py sits one level above
+        # static/, so each of these would hit it without the confinement.
+        target = Path(app_module.__file__)
+        for path in (
+            f"/../{target.name}",
+            f"/%2e%2e/{target.name}",
+            f"/..%2f{target.name}",
+            f"/{target.as_posix()}",
+        ):
+            assert client.get(path).content != target.read_bytes(), path
 
 
 class TestCaptionStyles:

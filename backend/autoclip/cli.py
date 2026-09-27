@@ -610,7 +610,7 @@ def update_ytdlp() -> None:
 
     console.print("[cyan]Updating yt-dlp...[/cyan]")
     result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
+        [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp[default]"],
         capture_output=True,
         text=True,
         check=False,

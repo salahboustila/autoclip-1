@@ -12,8 +12,10 @@ to fix it, rather than surfacing a raw yt-dlp traceback.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -101,6 +103,7 @@ def ingest_youtube(
         if total and done:
             on_progress(min(1.0, done / total))
 
+    cookie_copy: Path | None = None
     options: dict = {
         "format": settings.ytdlp_format,
         "outtmpl": str(target_dir / "source.%(ext)s"),
@@ -115,6 +118,23 @@ def ingest_youtube(
     if settings.cookies_from_browser:
         # yt-dlp expects a tuple; only the browser name is required.
         options["cookiesfrombrowser"] = (settings.cookies_from_browser,)
+    if settings.cookies_file:
+        cookies_file = Path(settings.cookies_file).expanduser()
+        if not cookies_file.is_file():
+            shutil.rmtree(target_dir, ignore_errors=True)
+            raise IngestError(
+                f"The cookies file {cookies_file} does not exist.",
+                hint="Fix or clear `ingest.cookies_file` in config.json.",
+            )
+        # yt-dlp writes the cookie jar back after every run. If YouTube revokes
+        # the session mid-run, that save strips the login cookies out of the
+        # user's export and every later run silently goes anonymous. Hand yt-dlp
+        # a throwaway copy so the original stays exactly as exported.
+        fd, copy_name = tempfile.mkstemp(prefix="autoclip-cookies-", suffix=".txt")
+        os.close(fd)
+        cookie_copy = Path(copy_name)
+        shutil.copyfile(cookies_file, cookie_copy)
+        options["cookiefile"] = str(cookie_copy)
     if settings.prefer_youtube_captions:
         options["writeautomaticsub"] = True
         options["subtitleslangs"] = ["en.*"]
@@ -129,6 +149,9 @@ def ingest_youtube(
     except Exception as exc:
         shutil.rmtree(target_dir, ignore_errors=True)
         raise IngestError(f"Could not download {url}: {exc}") from exc
+    finally:
+        if cookie_copy is not None:
+            cookie_copy.unlink(missing_ok=True)
 
     downloaded = _find_downloaded_file(target_dir)
     if downloaded is None:
@@ -159,7 +182,13 @@ def _translate_ytdlp_error(exc: Exception, settings: IngestSettings) -> IngestEr
     message = str(exc).lower()
 
     if any(marker in message for marker in _BOT_CHECK_MARKERS):
-        if settings.cookies_from_browser:
+        if settings.cookies_file:
+            hint = (
+                f"Cookies are already being read from {settings.cookies_file}, but "
+                "YouTube still refused. They have probably expired — export a fresh "
+                "cookies.txt while signed in to YouTube."
+            )
+        elif settings.cookies_from_browser:
             hint = (
                 f"Cookies are already being read from {settings.cookies_from_browser}, but "
                 "YouTube still refused. Make sure you are signed in to YouTube in that "

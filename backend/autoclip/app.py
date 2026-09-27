@@ -134,8 +134,10 @@ def _mount_frontend(app: FastAPI) -> None:
         if full_path.startswith("api/"):
             return JSONResponse(status_code=404, content={"detail": "Not found."})
 
-        candidate = directory / full_path
-        if full_path and candidate.is_file():
+        # Resolve and confine to the build directory: a joined path with `..`
+        # or a leading slash would otherwise serve any file on the machine.
+        candidate = (directory / full_path).resolve()
+        if full_path and candidate.is_relative_to(directory.resolve()) and candidate.is_file():
             return FileResponse(candidate)
 
         return FileResponse(directory / "index.html")
