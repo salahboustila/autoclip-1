@@ -78,6 +78,10 @@ class IngestSettings(BaseModel):
     #: As of 2026 most anonymous YouTube downloads hit a bot check that only
     #: browser cookies reliably clear, so this is a first-class setting.
     cookies_from_browser: str = ""
+    #: Path to a Netscape-format cookies.txt, for machines with no browser to
+    #: read from (servers, containers). yt-dlp rewrites this file as cookies
+    #: refresh, so point it at a dedicated copy.
+    cookies_file: str = ""
     #: Offer YouTube's own auto-captions as a fast path, skipping Whisper.
     prefer_youtube_captions: bool = False
 

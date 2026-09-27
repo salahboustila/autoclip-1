@@ -137,6 +137,7 @@ export interface Settings {
   ingest: {
     ytdlp_format: string
     cookies_from_browser: string
+    cookies_file: string
     prefer_youtube_captions: boolean
   }
   export: {
