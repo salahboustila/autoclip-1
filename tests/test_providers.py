@@ -10,10 +10,14 @@ from __future__ import annotations
 import pytest
 from autoclip.providers import ClipCandidates, DetectionConfig, TranscriptWindow
 from autoclip.providers.base import (
+    EMPTY_ANSWER_TOKEN,
+    SCORE_RULE_TOKEN,
     LLMProvider,
     ProviderError,
     ProviderStatus,
     extract_json_object,
+    load_prompt,
+    render_system_prompt,
 )
 
 VALID = '{"clips":[{"start_word_index":10,"end_word_index":50,"title":"T","score":80}]}'
@@ -192,6 +196,53 @@ class TestDetectionLoop:
 
         assert result.clips == []
         assert len(provider.prompts) == 1
+
+    async def test_replies_are_kept_for_the_trace(self, window: TranscriptWindow) -> None:
+        provider = ScriptedProvider(["nonsense", VALID])
+
+        result = await provider.detect_highlights(window, DetectionConfig())
+
+        assert [a["raw"] for a in result.attempts] == ["nonsense", VALID]
+        assert result.attempts[0]["error"] and result.attempts[1]["error"] is None
+
+    async def test_a_provider_error_carries_both_replies(self, window: TranscriptWindow) -> None:
+        provider = ScriptedProvider(["nope", "still nope"])
+
+        with pytest.raises(ProviderError) as caught:
+            await provider.detect_highlights(window, DetectionConfig())
+
+        assert [a["raw"] for a in caught.value.attempts] == ["nope", "still nope"]
+
+
+class TestScoreRule:
+    def test_the_shipped_prompt_has_each_placeholder_once(self) -> None:
+        prompt = load_prompt("highlight_v1")
+        assert prompt.count(SCORE_RULE_TOKEN) == 1
+        assert prompt.count(EMPTY_ANSWER_TOKEN) == 1
+
+    def test_the_normal_pass_still_allows_an_empty_answer(self) -> None:
+        system = render_system_prompt(load_prompt("highlight_v1"), DetectionConfig())
+
+        assert "Return nothing rather than padding the list" in system
+        assert 'return {"clips": []}' in system
+
+    def test_the_cutoff_comes_from_config(self) -> None:
+        system = render_system_prompt(load_prompt("highlight_v1"), DetectionConfig(min_score=65))
+
+        assert SCORE_RULE_TOKEN not in system
+        assert "Only return clips scoring 65 or higher" in system
+
+    def test_the_fallback_rule_names_the_cutoff_it_lifts(self) -> None:
+        config = DetectionConfig(min_score=65, fallback_clips=3)
+
+        system = render_system_prompt(load_prompt("highlight_v1"), config)
+
+        assert "return the 3 strongest moments" in system
+        assert "even if they score below 65" in system
+        # Left in, these beat the fallback instruction and it returns nothing.
+        assert "Return nothing rather than padding" not in system
+        assert 'return {"clips": []}' not in system
+        assert "<<" not in system
 
 
 class TestRegistry:

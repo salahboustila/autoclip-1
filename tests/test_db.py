@@ -39,6 +39,30 @@ def test_foreign_keys_are_enforced(initialised_db: int) -> None:
         store.create_job(job)
 
 
+def test_v1_database_gains_low_confidence_on_upgrade(autoclip_home) -> None:
+    # A database created before low_confidence existed keeps its clips and
+    # reads them back as normal-confidence.
+    paths.ensure_layout()
+    conn = sqlite3.connect(paths.db_path())
+    db.schema.MIGRATIONS[0](conn)
+    conn.execute("PRAGMA user_version = 1")
+    conn.execute(
+        "INSERT INTO sources (id, type, path, created_at) VALUES ('s', 'upload', '/x', 'now')"
+    )
+    conn.execute(
+        "INSERT INTO jobs (id, source_id, status, created_at, updated_at) "
+        "VALUES ('j', 's', 'done', 'now', 'now')"
+    )
+    conn.execute(
+        "INSERT INTO clips (id, job_id, start_s, end_s, created_at) VALUES ('c', 'j', 0, 30, 'now')"
+    )
+    conn.commit()
+    conn.close()
+
+    assert db.init() == db.SCHEMA_VERSION
+    assert store.list_clips("j")[0].low_confidence is False
+
+
 def test_newer_schema_version_is_refused(initialised_db: int) -> None:
     with db.connection() as conn:
         conn.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION + 5}")
@@ -193,6 +217,11 @@ class TestClips:
 
         assert len(listed) == 1
         assert listed[0].title == "Only survivor"
+
+    def test_low_confidence_round_trips(self, job: Job) -> None:
+        store.replace_clips(job.id, [self._clip(job, 1, low_confidence=True), self._clip(job, 2)])
+
+        assert [c.low_confidence for c in store.list_clips(job.id)] == [True, False]
 
     def test_duration_is_derived(self, job: Job) -> None:
         store.replace_clips(job.id, [self._clip(job, 1, start_s=12.5, end_s=57.5)])

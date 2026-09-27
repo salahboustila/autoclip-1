@@ -89,5 +89,6 @@ def detection_config(settings: Settings | None = None) -> DetectionConfig:
         min_duration_s=settings.clips.min_duration_s,
         max_duration_s=settings.clips.max_duration_s,
         max_clips=settings.clips.max_clips,
+        min_score=settings.clips.min_score,
         language=settings.whisper.language,
     )

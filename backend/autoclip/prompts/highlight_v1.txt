@@ -27,9 +27,9 @@ Score 0-100. Be harsh and use the whole range — a flat set of scores in the 80
 - **85-100** — Would genuinely perform. Strong hook, complete arc, one quotable line.
 - **70-84** — Solid. Real payoff, hook could be sharper.
 - **50-69** — Watchable but unremarkable. Weak hook or diffuse payoff.
-- **Below 50** — Do not return it at all.
+- **Below 50** — Weak. No real hook, or nothing lands.
 
-Return nothing rather than padding the list. A transcript section with three good moments should return three clips, not ten. Most sections of most videos contain nothing worth clipping; saying so is a correct answer.
+<<SCORE_RULE>>
 
 ## Titles and hooks
 
@@ -58,4 +58,4 @@ Respond with ONLY this JSON object. No prose before or after. No markdown fences
 
 `start_word_index` and `end_word_index` must be word indices that appear in the transcript section you were given. They are the only timing signal you provide — do not estimate seconds.
 
-If nothing in this section is worth clipping, return {"clips": []}.
+<<EMPTY_ANSWER>>

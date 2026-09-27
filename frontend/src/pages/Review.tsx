@@ -384,6 +384,14 @@ function ClipRow({
         <div className="mt-1 flex items-baseline gap-3">
           <span className="numeric text-xs text-ink-500">{formatDuration(clip.duration_s)}</span>
           {clip.user_trimmed && <span className="text-xs text-ink-600">trimmed</span>}
+          {clip.low_confidence && (
+            <span
+              className="text-xs italic text-ink-400"
+              title="Nothing in this video cleared the score cut-off; this is one of the best of what was there."
+            >
+              low confidence
+            </span>
+          )}
           {clip.exports.length > 0 && (
             <span className="text-xs text-signal-good">exported</span>
           )}

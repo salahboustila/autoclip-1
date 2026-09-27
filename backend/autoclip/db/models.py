@@ -140,6 +140,9 @@ class Clip:
     reason: str = ""
     status: ClipStatus = "candidate"
     user_trimmed: bool = False
+    #: Came from the fallback pass: below the score cut-off, kept because the
+    #: video had nothing that cleared it.
+    low_confidence: bool = False
     created_at: str = field(default_factory=utcnow)
 
     @property
@@ -162,6 +165,7 @@ class Clip:
             reason=row["reason"],
             status=row["status"],
             user_trimmed=bool(row["user_trimmed"]),
+            low_confidence=bool(row["low_confidence"]),
             created_at=row["created_at"],
         )
 

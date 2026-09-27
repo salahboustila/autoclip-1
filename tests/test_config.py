@@ -31,6 +31,12 @@ def test_settings_round_trip() -> None:
     assert reloaded.clips.max_clips == 25
 
 
+def test_score_cutoff_defaults_to_50_and_is_range_checked() -> None:
+    assert config.Settings().clips.min_score == 50
+    with pytest.raises(ValueError):
+        config.ClipSettings(min_score=101)
+
+
 def test_load_falls_back_to_defaults_on_corrupt_file() -> None:
     paths.ensure_layout()
     paths.config_path().write_text("{ not json", encoding="utf-8")

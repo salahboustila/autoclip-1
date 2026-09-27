@@ -65,6 +65,8 @@ export interface Clip {
   reason: string
   status: ClipStatus
   user_trimmed: boolean
+  /** From the fallback pass: below the score cut-off, kept because nothing cleared it. */
+  low_confidence: boolean
   caption_style: string
   ratio: string
   exports: ExportRecord[]
@@ -133,7 +135,7 @@ export interface Settings {
   active_provider: string
   providers: Record<string, { model: string; base_url: string | null }>
   whisper: { model: string; compute_type: string; language: string; diarization: boolean }
-  clips: { min_duration_s: number; max_duration_s: number; max_clips: number }
+  clips: { min_duration_s: number; max_duration_s: number; max_clips: number; min_score: number }
   ingest: {
     ytdlp_format: string
     cookies_from_browser: string

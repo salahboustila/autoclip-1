@@ -69,6 +69,9 @@ class ClipSettings(BaseModel):
     min_duration_s: float = 20.0
     max_duration_s: float = 90.0
     max_clips: int = 10
+    #: Highlight score (0-100) a candidate needs to be kept. When nothing in a
+    #: video clears it, a fallback pass returns the best few as low-confidence.
+    min_score: int = Field(default=50, ge=0, le=100)
 
 
 class IngestSettings(BaseModel):

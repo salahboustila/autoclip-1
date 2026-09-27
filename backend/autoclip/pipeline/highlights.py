@@ -12,11 +12,15 @@ buys back the clips that live on the seams.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
+import json
 import logging
 from collections.abc import Callable
+from pathlib import Path
 
 from ..db.models import Clip, new_id
 from ..providers import ClipCandidate, DetectionConfig, LLMProvider, TranscriptWindow
+from ..providers.base import ProviderError
 from . import boundaries
 from .prepare import Silence
 from .transcript import Transcript
@@ -34,6 +38,10 @@ DEDUPE_IOU = 0.4
 #: saturating the GPU, so extra concurrency only adds contention.
 HOSTED_CONCURRENCY = 3
 LOCAL_CONCURRENCY = 1
+
+#: Fallback pass: best moments requested per window, and the most kept overall.
+FALLBACK_PER_WINDOW = 3
+FALLBACK_MAX_CLIPS = 5
 
 
 class HighlightError(RuntimeError):
@@ -76,8 +84,15 @@ def build_windows(
         # Step forward by (window - overlap), measured in time then converted
         # back to a word index so overlap stays constant regardless of pace.
         next_time = transcript.words[last].end - overlap_s
-        next_cursor = transcript.index_at_time(next_time)
-        cursor = max(cursor + 1, next_cursor)
+        next_cursor = max(cursor + 1, transcript.index_at_time(next_time))
+
+        # Overlap only earns its tokens if the next window reaches past this
+        # one. Across a gap longer than a window it can't, and stepping back
+        # would re-send the tail words alone, a word further each time. There
+        # is nothing to straddle across a gap, so start fresh after it.
+        if transcript.words[last + 1].end > transcript.words[next_cursor].start + window_s:
+            next_cursor = last + 1
+        cursor = next_cursor
 
     return windows
 
@@ -127,25 +142,96 @@ async def detect(
     job_id: str,
     silences: list[Silence] | None = None,
     on_progress: Callable[[float], None] | None = None,
+    trace_dir: Path | None = None,
 ) -> list[Clip]:
-    """Run detection across the whole transcript and return ranked clips."""
+    """Run detection across the whole transcript and return ranked clips.
+
+    If nothing clears ``config.min_score``, a fallback pass asks each window
+    for its best moments regardless of score, and the top few come back marked
+    low-confidence rather than failing the job. With ``trace_dir``, every
+    window's raw model replies are written there as JSON for debugging.
+    """
     windows = build_windows(transcript)
     if not windows:
         raise HighlightError("The transcript is empty, so there is nothing to clip.")
 
-    log.info("Detecting highlights across %d window(s) with %s.", len(windows), provider.name)
+    if trace_dir is not None:
+        trace_dir.mkdir(parents=True, exist_ok=True)
+        for stale in trace_dir.glob("*.json"):
+            stale.unlink()
 
+    log.info("Detecting highlights across %d window(s) with %s.", len(windows), provider.name)
+    candidates, failures = await _run_pass(
+        "main", windows, transcript, provider, config, trace_dir, on_progress
+    )
+    if failures == len(windows):
+        raise HighlightError(
+            f"Every transcript window failed with {provider.name}; see the server log"
+            + (f" and the traces in {trace_dir}." if trace_dir else ".")
+        )
+
+    log.info("Providers proposed %d raw candidates.", len(candidates))
+    clips = build_clips(
+        transcript,
+        candidates,
+        config,
+        job_id=job_id,
+        silences=silences or [],
+        min_score=config.min_score,
+    )
+    if clips:
+        return clips
+
+    log.warning(
+        "Nothing scored %d or higher; asking for the best moments regardless of score.",
+        config.min_score,
+    )
+    fallback_config = dataclasses.replace(config, fallback_clips=FALLBACK_PER_WINDOW)
+    candidates, _ = await _run_pass(
+        "fallback", windows, transcript, provider, fallback_config, trace_dir, None
+    )
+    clips = build_clips(
+        transcript,
+        candidates,
+        dataclasses.replace(config, max_clips=min(FALLBACK_MAX_CLIPS, config.max_clips)),
+        job_id=job_id,
+        silences=silences or [],
+        low_confidence=True,
+    )
+    if not clips:
+        raise HighlightError(
+            "No clips were found, even on a second pass that ignored the score cut-off. "
+            "The model found no self-contained moment in this video — try a different "
+            "provider or model."
+        )
+    return clips
+
+
+async def _run_pass(
+    name: str,
+    windows: list[TranscriptWindow],
+    transcript: Transcript,
+    provider: LLMProvider,
+    config: DetectionConfig,
+    trace_dir: Path | None,
+    on_progress: Callable[[float], None] | None,
+) -> tuple[list[ClipCandidate], int]:
+    """Send every window once. Returns (candidates, number of failed windows)."""
     concurrency = LOCAL_CONCURRENCY if provider.name == "ollama" else HOSTED_CONCURRENCY
     semaphore = asyncio.Semaphore(concurrency)
     completed = 0
+    failures = 0
     lock = asyncio.Lock()
 
-    async def run_window(window: TranscriptWindow) -> list[ClipCandidate]:
-        nonlocal completed
+    async def run_window(index: int, window: TranscriptWindow) -> list[ClipCandidate]:
+        nonlocal completed, failures
         async with semaphore:
+            attempts: list[dict] = []
+            error: str | None = None
             try:
                 result = await provider.detect_highlights(window, config)
                 candidates = result.clips
+                attempts = getattr(result, "attempts", [])
             except Exception as exc:
                 # One bad window shouldn't lose the whole video's other windows.
                 log.warning(
@@ -155,24 +241,57 @@ async def detect(
                     exc,
                 )
                 candidates = []
+                error = f"{type(exc).__name__}: {exc}"
+                if isinstance(exc, ProviderError):
+                    attempts = exc.attempts
+            if trace_dir is not None:
+                _write_trace(
+                    trace_dir / f"{name}_{index:02d}.json",
+                    transcript,
+                    window,
+                    config,
+                    attempts,
+                    candidates,
+                    error,
+                )
             async with lock:
                 completed += 1
+                failures += error is not None
                 if on_progress:
                     on_progress(completed / len(windows))
             return candidates
 
-    results = await asyncio.gather(*(run_window(w) for w in windows))
-    candidates = [c for group in results for c in group]
+    results = await asyncio.gather(*(run_window(i, w) for i, w in enumerate(windows)))
+    return [c for group in results for c in group], failures
 
-    if not candidates:
-        raise HighlightError(
-            "No clips were found. This can mean the video genuinely has no "
-            "self-contained highlights, or that the model struggled with the "
-            "transcript — try a larger model or a different provider."
-        )
 
-    log.info("Providers proposed %d raw candidates.", len(candidates))
-    return build_clips(transcript, candidates, config, job_id=job_id, silences=silences or [])
+def _write_trace(
+    path: Path,
+    transcript: Transcript,
+    window: TranscriptWindow,
+    config: DetectionConfig,
+    attempts: list[dict],
+    candidates: list[ClipCandidate],
+    error: str | None,
+) -> None:
+    """Record what one window sent and got back. Best effort — never fails a job."""
+    start_s, end_s = transcript.time_range(window.first_word, window.last_word)
+    trace = {
+        "first_word": window.first_word,
+        "last_word": window.last_word,
+        "start_s": round(start_s, 2),
+        "end_s": round(end_s, 2),
+        "prompt_version": config.prompt_version,
+        "min_score": config.min_score,
+        "fallback_clips": config.fallback_clips,
+        "attempts": attempts,
+        "candidates": [c.model_dump() for c in candidates],
+        "error": error,
+    }
+    try:
+        path.write_text(json.dumps(trace, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError as exc:
+        log.warning("Could not write highlight trace %s: %s", path, exc)
 
 
 def build_clips(
@@ -182,8 +301,22 @@ def build_clips(
     *,
     job_id: str,
     silences: list[Silence] | None = None,
+    min_score: int | None = None,
+    low_confidence: bool = False,
 ) -> list[Clip]:
-    """Deduplicate, refine, rank, and truncate raw candidates into clips."""
+    """Deduplicate, refine, rank, and truncate raw candidates into clips.
+
+    ``min_score`` drops candidates below the cut-off first; the prompt asks the
+    model not to return them, but that's a request, not a guarantee.
+    """
+    if min_score is not None:
+        kept = [c for c in candidates if c.score >= min_score]
+        if len(kept) < len(candidates):
+            log.info(
+                "Dropped %d candidate(s) scoring below %d.", len(candidates) - len(kept), min_score
+            )
+        candidates = kept
+
     deduped = dedupe(candidates)
     log.info("%d candidates remain after dedupe.", len(deduped))
 
@@ -220,6 +353,7 @@ def build_clips(
                 hook=candidate.hook.strip(),
                 score=candidate.score,
                 reason=candidate.reason.strip(),
+                low_confidence=low_confidence,
             )
         )
 

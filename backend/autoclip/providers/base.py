@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, ValidationError, field_validator
 
 log = logging.getLogger(__name__)
 
@@ -37,10 +37,19 @@ PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
 class ProviderError(RuntimeError):
     """A provider could not produce a usable response."""
 
-    def __init__(self, message: str, *, provider: str = "", hint: str = "") -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        provider: str = "",
+        hint: str = "",
+        attempts: list[dict[str, Any]] | None = None,
+    ) -> None:
         super().__init__(message)
         self.provider = provider
         self.hint = hint
+        #: Raw responses that led here, for the per-window debug trace.
+        self.attempts = attempts or []
 
     def __str__(self) -> str:
         base = super().__str__()
@@ -85,6 +94,13 @@ class ClipCandidate(BaseModel):
 
 class ClipCandidates(BaseModel):
     clips: list[ClipCandidate] = Field(default_factory=list)
+    #: Each model reply behind this result, as ``{"raw", "error"}``. Private so
+    #: it never takes part in validating the model's JSON.
+    _attempts: list[dict[str, Any]] = PrivateAttr(default_factory=list)
+
+    @property
+    def attempts(self) -> list[dict[str, Any]]:
+        return self._attempts
 
 
 @dataclass
@@ -116,6 +132,12 @@ class DetectionConfig:
     #: iterate on prompts without touching code.
     prompt_version: str = "highlight_v1"
     temperature: float = 0.3
+    #: Candidates scoring below this are not wanted. Stated in the prompt and
+    #: enforced again in code, since models don't always obey.
+    min_score: int = 50
+    #: Non-zero only for the fallback pass: ask for this many best moments per
+    #: window regardless of ``min_score``.
+    fallback_clips: int = 0
 
 
 @dataclass
@@ -164,13 +186,18 @@ class LLMProvider(ABC):
         One retry is attempted on a schema violation, feeding the validation
         error back so the model can correct itself.
         """
-        system = load_prompt(config.prompt_version)
+        system = render_system_prompt(load_prompt(config.prompt_version), config)
         user = render_window_prompt(window, config)
+        attempts: list[dict[str, Any]] = []
 
         raw = await self._complete(system, user, config)
         try:
-            return self._parse(raw, window)
+            result = self._parse(raw, window)
+            attempts.append({"raw": raw, "error": None})
+            result._attempts = attempts
+            return result
         except (ValidationError, ValueError) as first_error:
+            attempts.append({"raw": raw, "error": str(first_error)})
             log.warning("%s returned invalid JSON; retrying with feedback.", self.name)
             repair = (
                 f"{user}\n\n"
@@ -181,11 +208,16 @@ class LLMProvider(ABC):
             )
             raw = await self._complete(system, repair, config)
             try:
-                return self._parse(raw, window)
+                result = self._parse(raw, window)
+                attempts.append({"raw": raw, "error": None})
+                result._attempts = attempts
+                return result
             except (ValidationError, ValueError) as second_error:
+                attempts.append({"raw": raw, "error": str(second_error)})
                 raise ProviderError(
                     f"{self.name} returned malformed clip data twice.",
                     provider=self.name,
+                    attempts=attempts,
                     hint=(
                         f"Last validation error: {second_error}\n\n"
                         "Smaller local models struggle with strict JSON. Try a larger "
@@ -228,6 +260,36 @@ def load_prompt(version: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+#: Placeholders in prompt files for the parts that depend on the pass. Both
+#: must go in the fallback: left in, "return nothing" beats "return your best
+#: three" and the fallback comes back empty (seen with claude-sonnet-5).
+SCORE_RULE_TOKEN = "<<SCORE_RULE>>"
+EMPTY_ANSWER_TOKEN = "<<EMPTY_ANSWER>>"
+
+
+def render_system_prompt(template: str, config: DetectionConfig) -> str:
+    """Fill in the score rule: the normal cut-off, or the fallback's override."""
+    if config.fallback_clips:
+        rule = (
+            f"This is a second pass. An earlier pass found nothing scoring {config.min_score} "
+            f"or higher anywhere in this video. For this pass, ignore that cut-off: return the "
+            f"{config.fallback_clips} strongest moments in this section, even if they score "
+            f"below {config.min_score}. Score them honestly; they will be shown to the editor as "
+            "low-confidence. Return an empty list only if the section has no complete thought "
+            "at all."
+        )
+        empty_answer = ""
+    else:
+        rule = (
+            f"Only return clips scoring {config.min_score} or higher. Leave out anything below.\n\n"
+            "Return nothing rather than padding the list. A transcript section with three good "
+            "moments should return three clips, not ten. Most sections of most videos contain "
+            "nothing worth clipping; saying so is a correct answer."
+        )
+        empty_answer = 'If nothing in this section is worth clipping, return {"clips": []}.'
+    return template.replace(SCORE_RULE_TOKEN, rule).replace(EMPTY_ANSWER_TOKEN, empty_answer)
+
+
 def render_window_prompt(window: TranscriptWindow, config: DetectionConfig) -> str:
     """Build the user message for one transcript window."""
     speaker_note = ""
@@ -243,10 +305,19 @@ def render_window_prompt(window: TranscriptWindow, config: DetectionConfig) -> s
         f"{speaker_note}\n"
         f"Clip length must be between {config.min_duration_s:.0f} and "
         f"{config.max_duration_s:.0f} seconds.\n"
-        f"Return at most {config.max_clips} clips.\n\n"
+        f"{_clip_count_line(config)}\n\n"
         f"---\n{window.text}\n---\n\n"
         "Respond with ONLY a JSON object matching the schema. No prose, no markdown fences."
     )
+
+
+def _clip_count_line(config: DetectionConfig) -> str:
+    if config.fallback_clips:
+        return (
+            f"Return your {config.fallback_clips} best moments in this section, ranked by score, "
+            f"even if they score below {config.min_score}."
+        )
+    return f"Return at most {config.max_clips} clips."
 
 
 _JSON_FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)

@@ -93,6 +93,11 @@ class JobWorkspace:
     def thumbnails(self) -> Path:
         return self.root / "thumbnails"
 
+    @property
+    def highlight_traces(self) -> Path:
+        """One JSON file per window per pass: the raw model replies."""
+        return self.root / "highlights"
+
     def crop_path(self, clip_id: str) -> Path:
         return self.root / "crops" / f"{clip_id}.json"
 
@@ -292,6 +297,7 @@ class PipelineRunner:
             job_id=self.job.id,
             silences=silences,
             on_progress=self._stage_progress(stage),
+            trace_dir=self.workspace.highlight_traces,
         )
 
         store.replace_clips(self.job.id, clips)
