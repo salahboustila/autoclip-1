@@ -36,7 +36,7 @@ dependencies = [
   "pydantic-settings>=2.5",
   "keyring>=25.4",
   # Ingest
-  "yt-dlp>=2026.1.1",
+  "yt-dlp[default]>=2026.1.1",
   # Transcription
   "faster-whisper>=1.1",
   # Reframe
