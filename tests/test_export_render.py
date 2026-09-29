@@ -414,3 +414,54 @@ def _frame_signature(video: Path, timestamp: float) -> str:
         check=True,
     )
     return result.stdout.strip()
+
+
+class TestHookTitleRender:
+    def test_title_is_burned_over_the_whole_clip(self, source_video, words, tmp_path) -> None:
+        from autoclip.config import HookTitleSettings
+        from PIL import Image
+
+        destination = tmp_path / "titled.mp4"
+        request = make_request(
+            source_video,
+            destination,
+            centre_crop(SOURCE_W, SOURCE_H, 5.0),
+            words,
+            hook_title="How Much Does the Average Man Make? 🤔",
+            hook_title_settings=HookTitleSettings(),
+        )
+
+        export.export_clip(request, work_dir=tmp_path / "work")
+
+        # The box starts at 13% of 1920; sample its left padding, which holds
+        # no text, at the start and the end of the clip.
+        for timestamp in (0.1, 4.8):
+            frame = tmp_path / f"frame_{timestamp}.png"
+            _extract_frame(destination, timestamp, frame)
+            with Image.open(frame) as image:
+                rgb = image.convert("RGB")
+                box_top = round(1920 * 0.13)
+                row = [rgb.getpixel((x, box_top + 40)) for x in range(0, 1080, 4)]
+                white = [p for p in row if min(p) > 235]
+                assert len(white) > 100, f"no title box at {timestamp}s"
+
+
+def _extract_frame(video: Path, timestamp: float, destination: Path) -> None:
+    subprocess.run(
+        [
+            ffmpeg.ffmpeg_path(),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-ss",
+            str(timestamp),
+            "-i",
+            str(video),
+            "-frames:v",
+            "1",
+            str(destination),
+        ],
+        check=True,
+        capture_output=True,
+    )

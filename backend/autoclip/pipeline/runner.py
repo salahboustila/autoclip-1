@@ -400,6 +400,8 @@ class PipelineRunner:
                 words=words,
                 style=style,
                 ratio=ratio,
+                hook_title=clip.hook_title,
+                hook_title_settings=self.settings.hook_title,
             )
 
             def clip_progress(fraction: float, i: int = index) -> None:

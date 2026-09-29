@@ -143,6 +143,8 @@ class Clip:
     #: Came from the fallback pass: below the score cut-off, kept because the
     #: video had nothing that cleared it.
     low_confidence: bool = False
+    #: Headline burned over the clip. Empty means no title overlay.
+    hook_title: str = ""
     created_at: str = field(default_factory=utcnow)
 
     @property
@@ -166,6 +168,7 @@ class Clip:
             status=row["status"],
             user_trimmed=bool(row["user_trimmed"]),
             low_confidence=bool(row["low_confidence"]),
+            hook_title=row["hook_title"],
             created_at=row["created_at"],
         )
 

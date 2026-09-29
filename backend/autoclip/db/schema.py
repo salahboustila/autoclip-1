@@ -109,9 +109,18 @@ def _migration_v2(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE clips ADD COLUMN low_confidence INTEGER NOT NULL DEFAULT 0")
 
 
+def _migration_v3(conn: sqlite3.Connection) -> None:
+    # Headline burned over the whole clip; empty means none.
+    conn.execute("ALTER TABLE clips ADD COLUMN hook_title TEXT NOT NULL DEFAULT ''")
+
+
 #: Ordered migrations. Index + 1 is the resulting ``user_version``.
 #: Append only — never edit a migration that has shipped.
-MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [_migration_v1, _migration_v2]
+MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
+    _migration_v1,
+    _migration_v2,
+    _migration_v3,
+]
 
 SCHEMA_VERSION = len(MIGRATIONS)
 

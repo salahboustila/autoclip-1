@@ -152,6 +152,7 @@ class ClipOut(BaseModel):
     status: str
     user_trimmed: bool
     low_confidence: bool = False
+    hook_title: str = ""
     caption_style: str = "bold_pop"
     ratio: str = "9:16"
     exports: list[ExportOut] = Field(default_factory=list)
@@ -180,6 +181,7 @@ class ClipOut(BaseModel):
             status=clip.status,
             user_trimmed=clip.user_trimmed,
             low_confidence=clip.low_confidence,
+            hook_title=clip.hook_title,
             caption_style=edit.caption_style if edit else "bold_pop",
             ratio=edit.ratio if edit else "9:16",
             exports=[ExportOut.of(e) for e in (exports or [])],
@@ -190,6 +192,8 @@ class ClipPatchIn(BaseModel):
     start_s: float | None = Field(default=None, ge=0)
     end_s: float | None = Field(default=None, gt=0)
     title: str | None = None
+    #: Empty string clears the title overlay.
+    hook_title: str | None = Field(default=None, max_length=200)
     status: Literal["candidate", "kept", "discarded", "exported"] | None = None
 
 
@@ -231,6 +235,7 @@ class SettingsOut(BaseModel):
     clips: dict[str, Any]
     ingest: dict[str, Any]
     export: dict[str, Any]
+    hook_title: dict[str, Any] = Field(default_factory=dict)
     cleanup: dict[str, Any] = Field(default_factory=dict)
     insecure_secret_storage: bool
     #: Which providers have a key stored. The keys themselves never leave the
@@ -245,6 +250,7 @@ class SettingsIn(BaseModel):
     clips: dict[str, Any] | None = None
     ingest: dict[str, Any] | None = None
     export: dict[str, Any] | None = None
+    hook_title: dict[str, Any] | None = None
     cleanup: dict[str, Any] | None = None
 
 

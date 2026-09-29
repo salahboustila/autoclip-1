@@ -22,7 +22,7 @@ import stat
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
 from . import paths
 
@@ -101,6 +101,22 @@ class ExportSettings(BaseModel):
     write_srt: bool = False
 
 
+class HookTitleSettings(BaseModel):
+    #: Burn a clip's hook title (when it has one) over the whole clip.
+    enabled: bool = True
+    #: Top of the title box as a percentage of frame height. Clamped to 12 at
+    #: minimum: above that, platform UI covers the frame.
+    position_pct: float = 13.0
+    #: Font size in pixels on a 1080-wide frame; scaled for other widths. Long
+    #: titles shrink below this to stay within two lines.
+    font_size: int = Field(default=64, ge=24, le=160)
+
+    @field_validator("position_pct", mode="before")
+    @classmethod
+    def _clamp_position(cls, value: Any) -> float:
+        return max(12.0, min(60.0, float(value)))
+
+
 class CleanupSettings(BaseModel):
     #: Once a job's export finishes, delete its source video and intermediate
     #: work files, keeping only the final clips. Frees the most disk; a deleted
@@ -124,6 +140,7 @@ class Settings(BaseModel):
     clips: ClipSettings = Field(default_factory=ClipSettings)
     ingest: IngestSettings = Field(default_factory=IngestSettings)
     export: ExportSettings = Field(default_factory=ExportSettings)
+    hook_title: HookTitleSettings = Field(default_factory=HookTitleSettings)
     cleanup: CleanupSettings = Field(default_factory=CleanupSettings)
 
     #: Set when secrets had to be written to config.json because no keyring

@@ -263,8 +263,8 @@ def replace_clips(job_id: str, clips: list[Clip]) -> list[Clip]:
             """
             INSERT INTO clips (id, job_id, rank, start_s, end_s, start_word, end_word,
                                title, hook, score, reason, status, user_trimmed,
-                               low_confidence, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               low_confidence, hook_title, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -282,6 +282,7 @@ def replace_clips(job_id: str, clips: list[Clip]) -> list[Clip]:
                     c.status,
                     int(c.user_trimmed),
                     int(c.low_confidence),
+                    c.hook_title,
                     c.created_at,
                 )
                 for c in clips
@@ -314,6 +315,7 @@ def update_clip(
     title: str | None = None,
     status: ClipStatus | None = None,
     user_trimmed: bool | None = None,
+    hook_title: str | None = None,
 ) -> None:
     fields: dict[str, Any] = {}
     for name, value in (
@@ -323,6 +325,7 @@ def update_clip(
         ("end_word", end_word),
         ("title", title),
         ("status", status),
+        ("hook_title", hook_title),
     ):
         if value is not None:
             fields[name] = value

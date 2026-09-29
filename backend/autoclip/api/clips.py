@@ -129,6 +129,7 @@ async def patch_clip(clip_id: str, payload: ClipPatchIn) -> ClipOut:
         start_word=start_word,
         end_word=end_word,
         title=payload.title,
+        hook_title=" ".join(payload.hook_title.split()) if payload.hook_title is not None else None,
         status=payload.status,
         user_trimmed=True if trimmed else None,
     )
@@ -218,6 +219,8 @@ async def export_clip(clip_id: str, payload: ExportRequestIn) -> ExportOut:
         words=words,
         style=style,
         ratio=payload.ratio,
+        hook_title=clip.hook_title,
+        hook_title_settings=settings.hook_title,
     )
 
     try:

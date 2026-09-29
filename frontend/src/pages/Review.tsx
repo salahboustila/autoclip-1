@@ -14,6 +14,7 @@ import {
 import { CaptionEditor } from '../components/CaptionEditor'
 import { ClipPlayer } from '../components/ClipPlayer'
 import { ErrorNote } from '../components/ErrorNote'
+import { HookTitleField } from '../components/HookTitleField'
 import { TrimBar } from '../components/TrimBar'
 
 const RATIOS = ['9:16', '1:1', '16:9'] as const
@@ -71,6 +72,15 @@ export function Review() {
   const setStatus = async (clip: Clip, status: Clip['status']) => {
     try {
       patchClip(await api.patchClip(clip.id, { status }))
+    } catch (err) {
+      setError(err as Error)
+    }
+  }
+
+  const saveHookTitle = async (hookTitle: string) => {
+    if (!selected) return
+    try {
+      patchClip(await api.patchClip(selected.id, { hook_title: hookTitle }))
     } catch (err) {
       setError(err as Error)
     }
@@ -258,6 +268,8 @@ export function Review() {
           <section className="space-y-10">
             {selected && (
               <>
+                <HookTitleField value={selected.hook_title} onSave={saveHookTitle} />
+
                 <div>
                   <p className="eyebrow">Why this clip</p>
                   <p className="mt-2 max-w-prose text-[0.9375rem] leading-relaxed text-ink-300">

@@ -26,6 +26,7 @@ def _settings_out(settings: config.Settings) -> SettingsOut:
         clips=payload["clips"],
         ingest=payload["ingest"],
         export=payload["export"],
+        hook_title=payload["hook_title"],
         cleanup=payload["cleanup"],
         insecure_secret_storage=payload["insecure_secret_storage"],
         keys_present={
@@ -54,7 +55,7 @@ async def put_settings(payload: SettingsIn) -> SettingsOut:
             )
         settings.active_provider = updates["active_provider"]
 
-    for section in ("whisper", "clips", "ingest", "export", "cleanup"):
+    for section in ("whisper", "clips", "ingest", "export", "hook_title", "cleanup"):
         if section in updates:
             current = getattr(settings, section)
             try:

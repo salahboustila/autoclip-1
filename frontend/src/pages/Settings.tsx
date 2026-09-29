@@ -269,6 +269,39 @@ export function Settings() {
         </label>
       </Section>
 
+      <Section title="Hook title">
+        <label className="flex items-start gap-3 text-sm text-ink-200">
+          <input
+            type="checkbox"
+            checked={settings.hook_title.enabled}
+            onChange={(e) =>
+              patch({ hook_title: { ...settings.hook_title, enabled: e.target.checked } })
+            }
+            className="mt-0.5 size-4 accent-sodium-500"
+          />
+          <span>
+            Burn each clip's hook title over the video
+            <span className="mt-1 block text-xs text-ink-500">
+              Only clips that have a hook title get one. Edit it on the review page.
+            </span>
+          </span>
+        </label>
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          <NumberField
+            label="Top position (% of height, min 12)"
+            value={settings.hook_title.position_pct}
+            onCommit={(value) =>
+              patch({ hook_title: { ...settings.hook_title, position_pct: Math.max(12, value) } })
+            }
+          />
+          <NumberField
+            label="Font size (px at 1080 wide)"
+            value={settings.hook_title.font_size}
+            onCommit={(value) => patch({ hook_title: { ...settings.hook_title, font_size: value } })}
+          />
+        </div>
+      </Section>
+
       <Section title="Cleanup">
         <label className="flex items-start gap-3 text-sm text-ink-200">
           <input

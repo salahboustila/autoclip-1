@@ -14,10 +14,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..config import ExportSettings
+from ..config import ExportSettings, HookTitleSettings
 from ..system import report
 from . import captions as captions_module
-from . import ffmpeg
+from . import ffmpeg, hooktitle
 from .captions import CaptionStyle
 from .reframe.croppath import CropPath, segment_crop_filter
 from .transcript import Word
@@ -56,6 +56,15 @@ class ExportRequest:
     style: CaptionStyle
     ratio: str = "9:16"
     burn_captions: bool = True
+    #: Headline overlaid for the whole clip. Empty (the default) adds nothing
+    #: to the render.
+    hook_title: str = ""
+    hook_title_settings: HookTitleSettings | None = None
+
+    @property
+    def wants_hook_title(self) -> bool:
+        settings = self.hook_title_settings
+        return bool(self.hook_title.strip()) and settings is not None and settings.enabled
 
     @property
     def duration_s(self) -> float:
@@ -89,6 +98,7 @@ def build_video_filtergraph(
     *,
     subtitle_name: str | None,
     fonts_name: str = "fonts",
+    title_input: int | None = None,
 ) -> str:
     """Build the ``-filter_complex`` video chain for one clip."""
     out_w, out_h = ratio_dimensions(request.ratio)
@@ -133,6 +143,12 @@ def build_video_filtergraph(
         parts.append(f"{''.join(labels)}concat=n={len(segments)}:v=1:a=0[vcat]")
         current = "[vcat]"
 
+    if title_input is not None:
+        # A single still frame: overlay's default eof_action=repeat holds it
+        # for the whole clip.
+        parts.append(f"{current}[{title_input}:v]overlay=0:0[vtitle]")
+        current = "[vtitle]"
+
     if request.burn_captions and subtitle_name is not None:
         # Bare relative names — ffmpeg runs with its cwd set to the render
         # workspace, so there is nothing here that needs escaping.
@@ -173,6 +189,31 @@ def _zoom_filter(zoom: float, out_w: int, out_h: int) -> str:
     """
     end_zoom = 1.0 + zoom
     return f"zoompan=z='min(zoom+{zoom / 240:.6f},{end_zoom:.4f})':d=1:s={out_w}x{out_h}:fps=30"
+
+
+def _render_hook_title(request: ExportRequest, workspace: Path, out_w: int, out_h: int) -> Path:
+    """Draw the hook title to a full-frame PNG, clear of the caption area."""
+    settings = request.hook_title_settings or HookTitleSettings()
+    bottom_limit = (
+        hooktitle.caption_top_px(request.style, out_h)
+        if request.burn_captions and request.words
+        else None
+    )
+    path = workspace / "hook_title.png"
+    try:
+        hooktitle.write_title_png(
+            path,
+            request.hook_title,
+            width=out_w,
+            height=out_h,
+            style="boxed",
+            font_size=settings.font_size,
+            position_pct=settings.position_pct,
+            bottom_limit_px=bottom_limit,
+        )
+    except hooktitle.HookTitleError as exc:
+        raise ExportError(str(exc)) from exc
+    return path
 
 
 def build_audio_filtergraph(settings: ExportSettings) -> str:
@@ -257,8 +298,15 @@ def export_clip(
             ass_path, captions_module.FONT_DIR
         )
 
+    title_args: list[str] = []
+    title_input: int | None = None
+    if request.wants_hook_title:
+        title_png = _render_hook_title(request, workspace, out_w, out_h)
+        title_args = ["-i", str(title_png)]
+        title_input = 1
+
     filtergraph = build_video_filtergraph(
-        request, subtitle_name=subtitle_name, fonts_name=fonts_name
+        request, subtitle_name=subtitle_name, fonts_name=fonts_name, title_input=title_input
     )
 
     request.destination.parent.mkdir(parents=True, exist_ok=True)
@@ -274,6 +322,7 @@ def export_clip(
         f"{request.duration_s:.4f}",
         "-i",
         str(request.source),
+        *title_args,
         "-filter_complex",
         filtergraph,
         "-map",

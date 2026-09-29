@@ -221,4 +221,4 @@ AutoClip bundles [yt-dlp](https://github.com/yt-dlp/yt-dlp). **Only download con
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Bundled fonts (Anton, Inter) are under the SIL Open Font License.
+MIT — see [LICENSE](LICENSE). Bundled fonts (Anton, Inter, Montserrat, Noto Color Emoji) are under the SIL Open Font License; see `backend/autoclip/assets/fonts/README.md`.

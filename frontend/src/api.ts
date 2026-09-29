@@ -67,6 +67,8 @@ export interface Clip {
   user_trimmed: boolean
   /** From the fallback pass: below the score cut-off, kept because nothing cleared it. */
   low_confidence: boolean
+  /** Headline burned over the whole clip; empty means none. */
+  hook_title: string
   caption_style: string
   ratio: string
   exports: ExportRecord[]
@@ -150,6 +152,7 @@ export interface Settings {
     crf: number
     write_srt: boolean
   }
+  hook_title: { enabled: boolean; position_pct: number; font_size: number }
   cleanup: { auto_delete_sources: boolean }
   insecure_secret_storage: boolean
   keys_present: Record<string, boolean>
@@ -267,7 +270,13 @@ export const api = {
 
   patchClip: (
     clipId: string,
-    patch: { start_s?: number; end_s?: number; title?: string; status?: ClipStatus },
+    patch: {
+      start_s?: number
+      end_s?: number
+      title?: string
+      hook_title?: string
+      status?: ClipStatus
+    },
   ) => request<Clip>(`/api/clips/${clipId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 
   patchCaptions: (
