@@ -45,6 +45,8 @@ def _apply_overrides(settings, overrides: JobSettingsIn):
         merged.export.caption_style = overrides.caption_style
     if overrides.ratio:
         merged.export.ratio = overrides.ratio
+    if overrides.viral_hook is not None:
+        merged.viral_hook.enabled = overrides.viral_hook
 
     return merged
 

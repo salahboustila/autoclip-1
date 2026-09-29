@@ -17,6 +17,7 @@ Cutting inside actual silence is where a human editor would put the blade.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from .prepare import Silence
@@ -65,6 +66,7 @@ def refine(
     silences: list[Silence] | None = None,
     min_duration_s: float = 20.0,
     max_duration_s: float = 90.0,
+    trim_start: Callable[[Transcript, int, int], int] | None = None,
 ) -> Boundary | None:
     """Refine a proposed word range into a cuttable boundary.
 
@@ -87,6 +89,12 @@ def refine(
 
     if end_word <= start_word:
         return None
+
+    if trim_start is not None:
+        # After snapping, so snapping can't walk back onto what was trimmed.
+        start_word = trim_start(transcript, start_word, end_word)
+        if end_word <= start_word:
+            return None
 
     end_word = _clamp_duration(transcript, start_word, end_word, min_duration_s, max_duration_s)
     if end_word is None:

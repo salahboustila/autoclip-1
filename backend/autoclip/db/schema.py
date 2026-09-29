@@ -114,12 +114,18 @@ def _migration_v3(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE clips ADD COLUMN hook_title TEXT NOT NULL DEFAULT ''")
 
 
+def _migration_v4(conn: sqlite3.Connection) -> None:
+    # Viral Hook Mode's topic label ("Money", "Dating", ...); empty otherwise.
+    conn.execute("ALTER TABLE clips ADD COLUMN topic TEXT NOT NULL DEFAULT ''")
+
+
 #: Ordered migrations. Index + 1 is the resulting ``user_version``.
 #: Append only — never edit a migration that has shipped.
 MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _migration_v1,
     _migration_v2,
     _migration_v3,
+    _migration_v4,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

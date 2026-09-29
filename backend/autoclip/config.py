@@ -101,6 +101,21 @@ class ExportSettings(BaseModel):
     write_srt: bool = False
 
 
+class ViralHookSettings(BaseModel):
+    """Viral Hook Mode (Podcast): an optional highlight preset.
+
+    Off by default. When on, highlight detection uses the viral-hook prompt,
+    targets 25-50 second clips, and returns the top ``top_n``. ``clips.min_score``
+    still applies.
+    """
+
+    enabled: bool = False
+    top_n: int = Field(default=10, ge=1, le=50)
+    min_duration_s: float = Field(default=25.0, gt=0)
+    max_duration_s: float = Field(default=50.0, gt=0)
+    prompt_version: str = "highlight_viral_v1"
+
+
 class HookTitleSettings(BaseModel):
     #: Burn a clip's hook title (when it has one) over the whole clip.
     enabled: bool = True
@@ -140,6 +155,7 @@ class Settings(BaseModel):
     clips: ClipSettings = Field(default_factory=ClipSettings)
     ingest: IngestSettings = Field(default_factory=IngestSettings)
     export: ExportSettings = Field(default_factory=ExportSettings)
+    viral_hook: ViralHookSettings = Field(default_factory=ViralHookSettings)
     hook_title: HookTitleSettings = Field(default_factory=HookTitleSettings)
     cleanup: CleanupSettings = Field(default_factory=CleanupSettings)
 

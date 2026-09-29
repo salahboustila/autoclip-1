@@ -145,6 +145,8 @@ class Clip:
     low_confidence: bool = False
     #: Headline burned over the clip. Empty means no title overlay.
     hook_title: str = ""
+    #: Viral Hook Mode topic label. Empty for the default preset.
+    topic: str = ""
     created_at: str = field(default_factory=utcnow)
 
     @property
@@ -169,6 +171,7 @@ class Clip:
             user_trimmed=bool(row["user_trimmed"]),
             low_confidence=bool(row["low_confidence"]),
             hook_title=row["hook_title"],
+            topic=row["topic"],
             created_at=row["created_at"],
         )
 

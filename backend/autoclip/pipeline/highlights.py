@@ -21,7 +21,7 @@ from pathlib import Path
 from ..db.models import Clip, new_id
 from ..providers import ClipCandidate, DetectionConfig, LLMProvider, TranscriptWindow
 from ..providers.base import ProviderError
-from . import boundaries
+from . import boundaries, viral
 from .prepare import Silence
 from .transcript import Transcript
 
@@ -309,7 +309,10 @@ def build_clips(
     ``min_score`` drops candidates below the cut-off first; the prompt asks the
     model not to return them, but that's a request, not a guarantee.
     """
-    if min_score is not None:
+    # In Viral Hook Mode the cut-off applies to the combined score, which is
+    # only known once each clip's final text is; it is enforced further down.
+    viral_cutoff = min_score if config.viral_hook else None
+    if min_score is not None and viral_cutoff is None:
         kept = [c for c in candidates if c.score >= min_score]
         if len(kept) < len(candidates):
             log.info(
@@ -329,6 +332,7 @@ def build_clips(
             silences=silences or [],
             min_duration_s=config.min_duration_s,
             max_duration_s=config.max_duration_s,
+            trim_start=viral.trim_opening if config.viral_hook else None,
         )
         if boundary is None:
             log.debug(
@@ -337,6 +341,16 @@ def build_clips(
                 candidate.end_word_index,
             )
             continue
+
+        score = candidate.score
+        if config.viral_hook:
+            clip_text = transcript.text_between(boundary.start_word, boundary.end_word)
+            score = viral.combined_score(candidate, clip_text)
+            if viral_cutoff is not None and score < viral_cutoff:
+                log.info(
+                    "Dropped a candidate whose combined score %d is below %d.", score, viral_cutoff
+                )
+                continue
 
         clips.append(
             Clip(
@@ -351,9 +365,10 @@ def build_clips(
                     boundary.start_word, min(boundary.start_word + 8, boundary.end_word)
                 ),
                 hook=candidate.hook.strip(),
-                score=candidate.score,
+                score=score,
                 reason=candidate.reason.strip(),
                 low_confidence=low_confidence,
+                topic=candidate.topic.strip() if config.viral_hook else "",
             )
         )
 

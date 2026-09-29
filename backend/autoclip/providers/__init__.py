@@ -85,6 +85,17 @@ def detection_config(settings: Settings | None = None) -> DetectionConfig:
     from ..config import load
 
     settings = settings if settings is not None else load()
+    viral = settings.viral_hook
+    if viral.enabled:
+        return DetectionConfig(
+            min_duration_s=viral.min_duration_s,
+            max_duration_s=viral.max_duration_s,
+            max_clips=viral.top_n,
+            min_score=settings.clips.min_score,
+            language=settings.whisper.language,
+            prompt_version=viral.prompt_version,
+            viral_hook=True,
+        )
     return DetectionConfig(
         min_duration_s=settings.clips.min_duration_s,
         max_duration_s=settings.clips.max_duration_s,

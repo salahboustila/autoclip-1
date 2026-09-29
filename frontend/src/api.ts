@@ -69,6 +69,8 @@ export interface Clip {
   low_confidence: boolean
   /** Headline burned over the whole clip; empty means none. */
   hook_title: string
+  /** Viral Hook Mode topic label ("Money", "Dating", ...); empty otherwise. */
+  topic: string
   caption_style: string
   ratio: string
   exports: ExportRecord[]
@@ -152,6 +154,13 @@ export interface Settings {
     crf: number
     write_srt: boolean
   }
+  viral_hook: {
+    enabled: boolean
+    top_n: number
+    min_duration_s: number
+    max_duration_s: number
+    prompt_version: string
+  }
   hook_title: { enabled: boolean; position_pct: number; font_size: number }
   cleanup: { auto_delete_sources: boolean }
   insecure_secret_storage: boolean
@@ -181,6 +190,8 @@ export interface JobSettingsOverrides {
   max_clips?: number
   caption_style?: string
   ratio?: string
+  /** Viral Hook Mode (Podcast) for this job only. */
+  viral_hook?: boolean
 }
 
 /** An API error carrying the server's message and its actionable hint. */

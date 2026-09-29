@@ -70,8 +70,14 @@ class ClipCandidate(BaseModel):
     hook: str = ""
     score: int = Field(default=50, ge=0, le=100)
     reason: str = ""
+    # Viral Hook Mode only; absent from the default prompt's replies.
+    topic: str = ""
+    hook_strength: int | None = None
+    comment_potential: int | None = None
+    standalone_clarity: int | None = None
+    has_number: bool | None = None
 
-    @field_validator("title", "hook", "reason", mode="before")
+    @field_validator("title", "hook", "reason", "topic", mode="before")
     @classmethod
     def _coerce_to_string(cls, value: Any) -> str:
         # Models occasionally return null or a number where text was asked for.
@@ -90,6 +96,20 @@ class ClipCandidate(BaseModel):
         if 0.0 < number <= 1.0:
             number *= 100
         return max(0, min(100, round(number)))
+
+    @field_validator("hook_strength", "comment_potential", "standalone_clarity", mode="before")
+    @classmethod
+    def _coerce_sub_score(cls, value: Any) -> int | None:
+        if value is None:
+            return None
+        return cls._coerce_score(value)
+
+    @field_validator("has_number", mode="before")
+    @classmethod
+    def _coerce_bool(cls, value: Any) -> bool | None:
+        if value is None or isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in ("true", "yes", "1")
 
 
 class ClipCandidates(BaseModel):
@@ -138,6 +158,8 @@ class DetectionConfig:
     #: Non-zero only for the fallback pass: ask for this many best moments per
     #: window regardless of ``min_score``.
     fallback_clips: int = 0
+    #: Viral Hook Mode: combined four-criterion scoring and strict openings.
+    viral_hook: bool = False
 
 
 @dataclass

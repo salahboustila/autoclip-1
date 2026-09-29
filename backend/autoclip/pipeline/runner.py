@@ -106,6 +106,28 @@ class JobWorkspace:
         return self.root / "captions"
 
 
+def settings_for_job(job: Job) -> Settings:
+    """The settings a job was created with, falling back to the saved ones.
+
+    ``POST /api/jobs`` stores the saved settings with that job's overrides
+    (provider, clip lengths, Viral Hook Mode, ...) layered on top. Running with
+    freshly loaded settings instead would silently drop those overrides.
+    Secrets are never part of the snapshot, so the plaintext-fallback store
+    is carried over from the live settings.
+    """
+    current = load_settings()
+    if not job.settings:
+        return current
+    try:
+        snapshot = Settings.model_validate(job.settings)
+    except Exception:
+        log.warning("Job %s has unreadable saved settings; using current ones.", job.id)
+        return current
+    snapshot._fallback_secrets = current._fallback_secrets
+    snapshot.insecure_secret_storage = current.insecure_secret_storage
+    return snapshot
+
+
 class PipelineRunner:
     """Executes one job."""
 
@@ -120,7 +142,7 @@ class PipelineRunner:
     ) -> None:
         self.job = job
         self.source = source
-        self.settings = settings or load_settings()
+        self.settings = settings or settings_for_job(job)
         self.on_progress = on_progress
         self._is_cancelled = is_cancelled or (lambda: False)
         self.workspace = JobWorkspace(job.id)

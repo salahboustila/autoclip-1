@@ -26,6 +26,7 @@ def _settings_out(settings: config.Settings) -> SettingsOut:
         clips=payload["clips"],
         ingest=payload["ingest"],
         export=payload["export"],
+        viral_hook=payload["viral_hook"],
         hook_title=payload["hook_title"],
         cleanup=payload["cleanup"],
         insecure_secret_storage=payload["insecure_secret_storage"],
@@ -55,7 +56,7 @@ async def put_settings(payload: SettingsIn) -> SettingsOut:
             )
         settings.active_provider = updates["active_provider"]
 
-    for section in ("whisper", "clips", "ingest", "export", "hook_title", "cleanup"):
+    for section in ("whisper", "clips", "ingest", "export", "viral_hook", "hook_title", "cleanup"):
         if section in updates:
             current = getattr(settings, section)
             try:
@@ -79,6 +80,10 @@ async def put_settings(payload: SettingsIn) -> SettingsOut:
     if settings.clips.min_duration_s >= settings.clips.max_duration_s:
         raise HTTPException(
             status_code=400, detail="Minimum clip length must be below the maximum."
+        )
+    if settings.viral_hook.min_duration_s >= settings.viral_hook.max_duration_s:
+        raise HTTPException(
+            status_code=400, detail="Viral Hook minimum length must be below the maximum."
         )
 
     config.save(settings)

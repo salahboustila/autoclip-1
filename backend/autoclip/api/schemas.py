@@ -68,6 +68,8 @@ class JobSettingsIn(BaseModel):
     max_clips: int | None = Field(default=None, ge=1, le=50)
     caption_style: str | None = None
     ratio: Literal["9:16", "1:1", "16:9"] | None = None
+    #: Turn Viral Hook Mode (Podcast) on or off for this job only.
+    viral_hook: bool | None = None
 
 
 class JobCreateIn(BaseModel):
@@ -153,6 +155,7 @@ class ClipOut(BaseModel):
     user_trimmed: bool
     low_confidence: bool = False
     hook_title: str = ""
+    topic: str = ""
     caption_style: str = "bold_pop"
     ratio: str = "9:16"
     exports: list[ExportOut] = Field(default_factory=list)
@@ -182,6 +185,7 @@ class ClipOut(BaseModel):
             user_trimmed=clip.user_trimmed,
             low_confidence=clip.low_confidence,
             hook_title=clip.hook_title,
+            topic=clip.topic,
             caption_style=edit.caption_style if edit else "bold_pop",
             ratio=edit.ratio if edit else "9:16",
             exports=[ExportOut.of(e) for e in (exports or [])],
@@ -235,6 +239,7 @@ class SettingsOut(BaseModel):
     clips: dict[str, Any]
     ingest: dict[str, Any]
     export: dict[str, Any]
+    viral_hook: dict[str, Any] = Field(default_factory=dict)
     hook_title: dict[str, Any] = Field(default_factory=dict)
     cleanup: dict[str, Any] = Field(default_factory=dict)
     insecure_secret_storage: bool
@@ -250,6 +255,7 @@ class SettingsIn(BaseModel):
     clips: dict[str, Any] | None = None
     ingest: dict[str, Any] | None = None
     export: dict[str, Any] | None = None
+    viral_hook: dict[str, Any] | None = None
     hook_title: dict[str, Any] | None = None
     cleanup: dict[str, Any] | None = None
 
