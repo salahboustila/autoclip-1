@@ -263,8 +263,9 @@ def replace_clips(job_id: str, clips: list[Clip]) -> list[Clip]:
             """
             INSERT INTO clips (id, job_id, rank, start_s, end_s, start_word, end_word,
                                title, hook, score, reason, status, user_trimmed,
-                               low_confidence, hook_title, topic, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               low_confidence, hook_title, topic, hook_title_alts,
+                               post_caption, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -284,6 +285,8 @@ def replace_clips(job_id: str, clips: list[Clip]) -> list[Clip]:
                     int(c.low_confidence),
                     c.hook_title,
                     c.topic,
+                    json.dumps(c.hook_title_alts, ensure_ascii=False),
+                    c.post_caption,
                     c.created_at,
                 )
                 for c in clips
@@ -317,6 +320,8 @@ def update_clip(
     status: ClipStatus | None = None,
     user_trimmed: bool | None = None,
     hook_title: str | None = None,
+    hook_title_alts: list[str] | None = None,
+    post_caption: str | None = None,
 ) -> None:
     fields: dict[str, Any] = {}
     for name, value in (
@@ -327,11 +332,14 @@ def update_clip(
         ("title", title),
         ("status", status),
         ("hook_title", hook_title),
+        ("post_caption", post_caption),
     ):
         if value is not None:
             fields[name] = value
     if user_trimmed is not None:
         fields["user_trimmed"] = int(user_trimmed)
+    if hook_title_alts is not None:
+        fields["hook_title_alts"] = json.dumps(hook_title_alts, ensure_ascii=False)
 
     if not fields:
         return

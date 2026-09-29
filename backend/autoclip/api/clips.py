@@ -15,6 +15,7 @@ from ..db import store
 from ..db.models import Export, new_id
 from ..pipeline import captions as captions_module
 from ..pipeline import export as export_module
+from ..pipeline import hookcopy
 from ..pipeline.reframe.croppath import CropPath, centre_crop
 from ..pipeline.runner import JobWorkspace
 from ..pipeline.transcript import Transcript, Word
@@ -130,11 +131,20 @@ async def patch_clip(clip_id: str, payload: ClipPatchIn) -> ClipOut:
         end_word=end_word,
         title=payload.title,
         hook_title=" ".join(payload.hook_title.split()) if payload.hook_title is not None else None,
+        hook_title_alts=(
+            [" ".join(t.split()) for t in payload.hook_title_alts if t.strip()]
+            if payload.hook_title_alts is not None
+            else None
+        ),
+        post_caption=payload.post_caption.strip() if payload.post_caption is not None else None,
         status=payload.status,
         user_trimmed=True if trimmed else None,
     )
 
     updated = await asyncio.to_thread(store.get_clip, clip_id)
+    if payload.post_caption is not None and await asyncio.to_thread(store.list_exports, clip_id):
+        # Keep the caption file beside an already-exported clip in step.
+        await asyncio.to_thread(_write_caption, updated)
     return await asyncio.to_thread(_clip_out, updated)
 
 
@@ -207,7 +217,11 @@ async def export_clip(clip_id: str, payload: ExportRequestIn) -> ExportOut:
     destination = (
         paths.exports_dir()
         / clip.job_id
-        / export_module.output_filename(clip.title or f"clip-{clip.rank}", payload.ratio)
+        / export_module.output_filename(
+            clip.title or f"clip-{clip.rank}",
+            payload.ratio,
+            rank=clip.rank if clip.post_caption else None,
+        )
     )
 
     request = export_module.ExportRequest(
@@ -243,6 +257,7 @@ async def export_clip(clip_id: str, payload: ExportRequestIn) -> ExportOut:
     )
     await asyncio.to_thread(store.create_export, record)
     await asyncio.to_thread(store.update_clip, clip_id, status="exported")
+    await asyncio.to_thread(_write_caption, clip)
 
     return ExportOut.of(record)
 
@@ -307,6 +322,10 @@ async def caption_styles() -> list[CaptionStyleOut]:
 # --------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------
+
+
+def _write_caption(clip) -> None:
+    hookcopy.write_caption_file(paths.exports_dir() / clip.job_id, clip.rank, clip.post_caption)
 
 
 def _load_transcript(job_id: str) -> Transcript:

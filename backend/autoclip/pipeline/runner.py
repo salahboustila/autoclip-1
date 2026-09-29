@@ -25,7 +25,7 @@ from ..db import store
 from ..db.models import Clip, Export, Job, Source, new_id, utcnow
 from ..db.models import Transcript as TranscriptRow
 from ..providers import build_provider, detection_config
-from . import Stage, captions, export, ffmpeg, highlights, prepare, transcribe
+from . import Stage, captions, export, ffmpeg, highlights, hookcopy, prepare, transcribe
 from .prepare import Silence
 from .reframe import ReframeConfig, build_crop_path
 from .reframe.croppath import CropPath
@@ -332,9 +332,25 @@ class PipelineRunner:
             config,
             job_id=self.job.id,
             silences=silences,
-            on_progress=self._stage_progress(stage),
+            on_progress=self._stage_progress(stage)
+            if not config.viral_hook
+            else lambda f: self._emit(stage, 0.8 * f),
             trace_dir=self.workspace.highlight_traces,
         )
+
+        if config.viral_hook:
+            viral_settings = self.settings.viral_hook
+            self._emit(stage, 0.8, "Writing hook titles and captions")
+            await hookcopy.generate_for_clips(
+                clips,
+                transcript,
+                provider,
+                facts=viral_settings.speaker_facts,
+                handle=viral_settings.caption_handle,
+                fixed_hashtags=viral_settings.fixed_hashtags,
+                trace_dir=self.workspace.highlight_traces,
+                on_progress=lambda f: self._emit(stage, 0.8 + 0.2 * f),
+            )
 
         store.replace_clips(self.job.id, clips)
         self._finish_stage(stage)
@@ -410,7 +426,9 @@ class PipelineRunner:
             crop_path = crop_paths.get(clip.id) or self._fallback_crop_path(clip, ratio)
             words = transcript.slice(clip.start_word, clip.end_word)
             destination = destination_dir / export.output_filename(
-                clip.title or f"clip-{clip.rank}", ratio
+                clip.title or f"clip-{clip.rank}",
+                ratio,
+                rank=clip.rank if clip.post_caption else None,
             )
 
             request = export.ExportRequest(
@@ -448,6 +466,7 @@ class PipelineRunner:
                 )
             )
             store.update_clip(clip.id, status="exported")
+            hookcopy.write_caption_file(destination_dir, clip.rank, clip.post_caption)
 
         self._finish_stage(stage)
 

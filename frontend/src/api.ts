@@ -71,6 +71,10 @@ export interface Clip {
   hook_title: string
   /** Viral Hook Mode topic label ("Money", "Dating", ...); empty otherwise. */
   topic: string
+  /** Runner-up hook titles, best first. */
+  hook_title_alts: string[]
+  /** Social post caption: question line, then handle and hashtags. */
+  post_caption: string
   caption_style: string
   ratio: string
   exports: ExportRecord[]
@@ -160,6 +164,9 @@ export interface Settings {
     min_duration_s: number
     max_duration_s: number
     prompt_version: string
+    speaker_facts: string
+    caption_handle: string
+    fixed_hashtags: string[]
   }
   hook_title: { enabled: boolean; position_pct: number; font_size: number }
   cleanup: { auto_delete_sources: boolean }
@@ -286,6 +293,8 @@ export const api = {
       end_s?: number
       title?: string
       hook_title?: string
+      hook_title_alts?: string[]
+      post_caption?: string
       status?: ClipStatus
     },
   ) => request<Clip>(`/api/clips/${clipId}`, { method: 'PATCH', body: JSON.stringify(patch) }),

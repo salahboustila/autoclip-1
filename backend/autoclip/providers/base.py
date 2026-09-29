@@ -200,6 +200,10 @@ class LLMProvider(ABC):
 
     # -- shared behaviour --------------------------------------------------
 
+    async def complete(self, system: str, user: str, config: DetectionConfig) -> str:
+        """Send one free-form prompt. For callers other than highlight detection."""
+        return await self._complete(system, user, config)
+
     async def detect_highlights(
         self, window: TranscriptWindow, config: DetectionConfig
     ) -> ClipCandidates:

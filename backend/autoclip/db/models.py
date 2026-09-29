@@ -147,6 +147,10 @@ class Clip:
     hook_title: str = ""
     #: Viral Hook Mode topic label. Empty for the default preset.
     topic: str = ""
+    #: Runner-up hook titles, best first.
+    hook_title_alts: list[str] = field(default_factory=list)
+    #: Social post caption (question line, handle, hashtags). Empty if none.
+    post_caption: str = ""
     created_at: str = field(default_factory=utcnow)
 
     @property
@@ -172,6 +176,8 @@ class Clip:
             low_confidence=bool(row["low_confidence"]),
             hook_title=row["hook_title"],
             topic=row["topic"],
+            hook_title_alts=json.loads(row["hook_title_alts"] or "[]"),
+            post_caption=row["post_caption"],
             created_at=row["created_at"],
         )
 

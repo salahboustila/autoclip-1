@@ -156,6 +156,8 @@ class ClipOut(BaseModel):
     low_confidence: bool = False
     hook_title: str = ""
     topic: str = ""
+    hook_title_alts: list[str] = Field(default_factory=list)
+    post_caption: str = ""
     caption_style: str = "bold_pop"
     ratio: str = "9:16"
     exports: list[ExportOut] = Field(default_factory=list)
@@ -186,6 +188,8 @@ class ClipOut(BaseModel):
             low_confidence=clip.low_confidence,
             hook_title=clip.hook_title,
             topic=clip.topic,
+            hook_title_alts=clip.hook_title_alts,
+            post_caption=clip.post_caption,
             caption_style=edit.caption_style if edit else "bold_pop",
             ratio=edit.ratio if edit else "9:16",
             exports=[ExportOut.of(e) for e in (exports or [])],
@@ -198,6 +202,8 @@ class ClipPatchIn(BaseModel):
     title: str | None = None
     #: Empty string clears the title overlay.
     hook_title: str | None = Field(default=None, max_length=200)
+    hook_title_alts: list[str] | None = Field(default=None, max_length=10)
+    post_caption: str | None = Field(default=None, max_length=2200)
     status: Literal["candidate", "kept", "discarded", "exported"] | None = None
 
 

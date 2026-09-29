@@ -84,8 +84,13 @@ def slugify_title(title: str, *, max_length: int = 50) -> str:
     return slug[:max_length] or "clip"
 
 
-def output_filename(title: str, ratio: str) -> str:
-    return f"{slugify_title(title)}_{ratio.replace(':', 'x')}.mp4"
+def output_filename(title: str, ratio: str, *, rank: int | None = None) -> str:
+    """``<slug>_9x16.mp4``, or ``clip_03_<slug>_9x16.mp4`` when ranked.
+
+    The ranked form pairs each video with its ``clip_03_caption.txt``.
+    """
+    prefix = f"clip_{rank:02d}_" if rank is not None else ""
+    return f"{prefix}{slugify_title(title)}_{ratio.replace(':', 'x')}.mp4"
 
 
 # --------------------------------------------------------------------------

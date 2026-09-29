@@ -114,6 +114,13 @@ class ViralHookSettings(BaseModel):
     min_duration_s: float = Field(default=25.0, gt=0)
     max_duration_s: float = Field(default=50.0, gt=0)
     prompt_version: str = "highlight_viral_v1"
+    #: True facts about the speaker the title writer may use ("Michael Sartain
+    #: is a multi-millionaire entrepreneur"). Hook titles are otherwise limited
+    #: to what is said inside each clip, so leave this empty unless it's true.
+    speaker_facts: str = ""
+    #: Handle and fixed hashtags appended to every post caption.
+    caption_handle: str = "@michaelsartain"
+    fixed_hashtags: list[str] = Field(default_factory=lambda: ["#usa", "#uk", "#canada"])
 
 
 class HookTitleSettings(BaseModel):
