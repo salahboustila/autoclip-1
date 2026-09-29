@@ -93,6 +93,9 @@ class CaptionStyle:
     boxed: bool = False
     box_colour: str = "#000000"
     box_alpha: int = 40
+    #: Colour for one keyword per caption line (the Podcast Hook layout). None
+    #: disables it, which is every preset's default.
+    keyword_colour: str | None = None
 
     @property
     def font_path(self) -> Path:
@@ -298,6 +301,41 @@ def _build_ass_style(style: CaptionStyle, *, height: int, scale: float) -> pysub
     return ass_style
 
 
+#: Never chosen as a line's keyword.
+_STOPWORDS = {
+    "the", "and", "but", "for", "that", "this", "with", "have", "has", "had", "was",
+    "were", "are", "you", "your", "they", "them", "their", "there", "then", "than",
+    "what", "when", "where", "which", "who", "will", "would", "could", "should",
+    "just", "like", "really", "very", "about", "into", "from", "because", "been",
+    "being", "some", "it's", "that's", "i'm", "don't", "gonna", "kind", "sort",
+    "know", "mean", "yeah", "okay", "right", "well", "also", "even", "only",
+}  # fmt: skip
+
+
+def pick_keyword(words: list[Word]) -> int | None:
+    """Index of the word to emphasise in a caption line.
+
+    A number wins ("69%", "fifty"), since that's what stops a scroll;
+    otherwise the longest word that isn't filler. None when the line is
+    nothing but filler.
+    """
+    from .viral import mentions_number
+
+    best: int | None = None
+    best_len = 0
+    for index, word in enumerate(words):
+        core = "".join(c for c in word.text.lower() if c.isalnum() or c in "'%$")
+        if mentions_number(word.text):
+            return index
+        if len(core) >= 4 and core not in _STOPWORDS and len(core) > best_len:
+            best, best_len = index, len(core)
+    return best
+
+
+def _keyword_index(group: CaptionGroup, style: CaptionStyle) -> int | None:
+    return pick_keyword(group.words) if style.keyword_colour else None
+
+
 def _text_of(word: Word, style: CaptionStyle) -> str:
     text = word.text.strip()
     return text.upper() if style.all_caps else text
@@ -313,8 +351,14 @@ def _event(start_s: float, end_s: float, text: str, offset: float) -> pysubs2.SS
 
 
 def _static_event(group: CaptionGroup, style: CaptionStyle, offset: float) -> pysubs2.SSAEvent:
-    text = " ".join(_text_of(w, style) for w in group.words)
-    return _event(group.start, group.end, text, offset)
+    keyword = _keyword_index(group, style)
+    parts = []
+    for index, word in enumerate(group.words):
+        text = _text_of(word, style)
+        if index == keyword:
+            text = f"{{\\c{ass_colour_override(style.keyword_colour)}}}{text}{{\\r}}"
+        parts.append(text)
+    return _event(group.start, group.end, " ".join(parts), offset)
 
 
 def _karaoke_event(group: CaptionGroup, style: CaptionStyle, offset: float) -> pysubs2.SSAEvent:
@@ -346,6 +390,8 @@ def _per_word_events(
     the emphasised word changes between them.
     """
     accent_tag = f"\\c{ass_colour_override(style.accent or style.primary)}"
+    keyword = _keyword_index(group, style)
+    keyword_tag = f"\\c{ass_colour_override(style.keyword_colour)}" if style.keyword_colour else ""
     scale = style.scale_percent
     events: list[pysubs2.SSAEvent] = []
 
@@ -353,8 +399,13 @@ def _per_word_events(
         rendered: list[str] = []
         for index, other in enumerate(group.words):
             text = _text_of(other, style)
+            # The keyword keeps its colour throughout; the spoken word pops.
+            colour = keyword_tag if index == keyword else ""
             if index == active:
-                rendered.append(f"{{{accent_tag}\\fscx{scale}\\fscy{scale}}}{text}{{\\r}}")
+                colour = colour or accent_tag
+                rendered.append(f"{{{colour}\\fscx{scale}\\fscy{scale}}}{text}{{\\r}}")
+            elif colour:
+                rendered.append(f"{{{colour}}}{text}{{\\r}}")
             else:
                 rendered.append(text)
 

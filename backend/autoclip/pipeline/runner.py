@@ -25,7 +25,17 @@ from ..db import store
 from ..db.models import Clip, Export, Job, Source, new_id, utcnow
 from ..db.models import Transcript as TranscriptRow
 from ..providers import build_provider, detection_config
-from . import Stage, captions, export, ffmpeg, highlights, hookcopy, prepare, transcribe
+from . import (
+    Stage,
+    captions,
+    export,
+    ffmpeg,
+    highlights,
+    hookcopy,
+    layouts,
+    prepare,
+    transcribe,
+)
 from .prepare import Silence
 from .reframe import ReframeConfig, build_crop_path
 from .reframe.croppath import CropPath
@@ -376,6 +386,14 @@ class PipelineRunner:
         if self.settings.export.ratio == "16:9":
             config = ReframeConfig(aspect_w=16, aspect_h=9)
 
+        podcast = self._podcast_options()
+        if podcast is not None:
+            if podcast.layout.fit == "full_width":
+                # The whole frame is shown, so there is nothing to track.
+                self._finish_stage(stage)
+                return crop_paths
+            config = ReframeConfig(aspect_w=1, aspect_h=1)
+
         for index, clip in enumerate(clips):
             self._check_cancelled()
             cached = self.workspace.crop_path(clip.id)
@@ -415,7 +433,8 @@ class PipelineRunner:
         self._check_cancelled()
 
         style = captions.get_style(self.settings.export.caption_style)
-        ratio = self.settings.export.ratio
+        podcast = self._podcast_options()
+        ratio = "9:16" if podcast is not None else self.settings.export.ratio
         source_path = Path(self.source.path)
         destination_dir = paths.exports_dir() / self.job.id
         destination_dir.mkdir(parents=True, exist_ok=True)
@@ -423,7 +442,16 @@ class PipelineRunner:
         for index, clip in enumerate(clips):
             self._check_cancelled()
 
-            crop_path = crop_paths.get(clip.id) or self._fallback_crop_path(clip, ratio)
+            if podcast is not None:
+                crop_path = layouts.podcast_crop_path(
+                    podcast,
+                    self.source.width or 1920,
+                    self.source.height or 1080,
+                    clip.end_s - clip.start_s,
+                    tracked=crop_paths.get(clip.id),
+                )
+            else:
+                crop_path = crop_paths.get(clip.id) or self._fallback_crop_path(clip, ratio)
             words = transcript.slice(clip.start_word, clip.end_word)
             destination = destination_dir / export.output_filename(
                 clip.title or f"clip-{clip.rank}",
@@ -442,6 +470,7 @@ class PipelineRunner:
                 ratio=ratio,
                 hook_title=clip.hook_title,
                 hook_title_settings=self.settings.hook_title,
+                podcast=podcast,
             )
 
             def clip_progress(fraction: float, i: int = index) -> None:
@@ -469,6 +498,9 @@ class PipelineRunner:
             hookcopy.write_caption_file(destination_dir, clip.rank, clip.post_caption)
 
         self._finish_stage(stage)
+
+    def _podcast_options(self) -> layouts.PodcastOptions | None:
+        return layouts.podcast_options(self.settings, self.source.width, self.source.height)
 
     def _fallback_crop_path(self, clip: Clip, ratio: str) -> CropPath:
         """Centre crop for sources with no reframe data (audio-only, or a failure)."""

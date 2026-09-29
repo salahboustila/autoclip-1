@@ -15,9 +15,9 @@ from ..db import store
 from ..db.models import Export, new_id
 from ..pipeline import captions as captions_module
 from ..pipeline import export as export_module
-from ..pipeline import hookcopy
+from ..pipeline import hookcopy, layouts
 from ..pipeline.reframe.croppath import CropPath, centre_crop
-from ..pipeline.runner import JobWorkspace
+from ..pipeline.runner import JobWorkspace, settings_for_job
 from ..pipeline.transcript import Transcript, Word
 from .schemas import (
     CaptionPatchIn,
@@ -212,14 +212,28 @@ async def export_clip(clip_id: str, payload: ExportRequestIn) -> ExportOut:
     settings.export.write_srt = payload.write_srt
 
     workspace = JobWorkspace(clip.job_id)
-    crop_path = await asyncio.to_thread(_crop_path_for, workspace, clip, source, payload.ratio)
+    # The layout belongs to the job (Viral Hook Mode is chosen per job), not
+    # to whatever the saved settings say today.
+    podcast = layouts.podcast_options(settings_for_job(job), source.width, source.height)
+    ratio = "9:16" if podcast is not None else payload.ratio
+    if podcast is not None:
+        cached = workspace.crop_path(clip.id)
+        crop_path = layouts.podcast_crop_path(
+            podcast,
+            source.width or 1920,
+            source.height or 1080,
+            clip.end_s - clip.start_s,
+            tracked=CropPath.load(cached) if cached.exists() else None,
+        )
+    else:
+        crop_path = await asyncio.to_thread(_crop_path_for, workspace, clip, source, ratio)
 
     destination = (
         paths.exports_dir()
         / clip.job_id
         / export_module.output_filename(
             clip.title or f"clip-{clip.rank}",
-            payload.ratio,
+            ratio,
             rank=clip.rank if clip.post_caption else None,
         )
     )
@@ -232,9 +246,10 @@ async def export_clip(clip_id: str, payload: ExportRequestIn) -> ExportOut:
         crop_path=crop_path,
         words=words,
         style=style,
-        ratio=payload.ratio,
+        ratio=ratio,
         hook_title=clip.hook_title,
         hook_title_settings=settings.hook_title,
+        podcast=podcast,
     )
 
     try:
@@ -251,7 +266,7 @@ async def export_clip(clip_id: str, payload: ExportRequestIn) -> ExportOut:
         id=new_id(),
         clip_id=clip_id,
         path=str(destination),
-        ratio=payload.ratio,
+        ratio=ratio,
         style=style.key,
         size_bytes=destination.stat().st_size,
     )

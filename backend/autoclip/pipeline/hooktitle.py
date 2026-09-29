@@ -80,6 +80,31 @@ class HookTitleStyle:
 STYLES: dict[str, HookTitleStyle] = {
     # Default mode: black bold text in a white rounded box.
     "boxed": HookTitleStyle(key="boxed"),
+    # Podcast Hook layout: bold white type straight on the black band, with the
+    # key word in yellow.
+    "podcast_anton": HookTitleStyle(
+        key="podcast_anton",
+        font_file="Anton-Regular.ttf",
+        text_colour="#FFFFFF",
+        box_colour=None,
+        highlight_colour="#FFE500",
+        all_caps=True,
+        max_width_ratio=0.92,
+        line_spacing=1.1,
+        pad_x=0.2,
+        pad_y=0.15,
+    ),
+    "podcast_montserrat": HookTitleStyle(
+        key="podcast_montserrat",
+        font_file="Montserrat-ExtraBold.ttf",
+        text_colour="#FFFFFF",
+        box_colour=None,
+        highlight_colour="#FFE500",
+        max_width_ratio=0.92,
+        line_spacing=1.15,
+        pad_x=0.2,
+        pad_y=0.15,
+    ),
 }
 
 
@@ -258,6 +283,7 @@ def layout_title(
     position_pct: float = DEFAULT_TOP_PCT,
     bottom_limit_px: int | None = None,
     highlight_words: list[str] | None = None,
+    centre_in_band: bool = False,
 ) -> TitleLayout:
     """Fit a title into at most ``style.max_lines`` lines above ``bottom_limit_px``.
 
@@ -286,6 +312,11 @@ def layout_title(
         while size >= base * MIN_SHRINK:
             candidate = _try_layout(words, round(size), style, highlights, top, limit, max_width)
             if candidate is not None:
+                if centre_in_band:
+                    # Sit midway between the top line and the limit.
+                    left, box_top, right, box_bottom = candidate.box
+                    shift = max(0, (limit - box_bottom) // 2)
+                    candidate.box = (left, box_top + shift, right, box_bottom + shift)
                 candidate.truncated = truncated
                 if truncated:
                     log.warning("Hook title %r did not fit and was shortened.", text)
@@ -340,6 +371,7 @@ def render_title(
     position_pct: float = DEFAULT_TOP_PCT,
     bottom_limit_px: int | None = None,
     highlight_words: list[str] | None = None,
+    centre_in_band: bool = False,
 ) -> tuple[Image.Image, TitleLayout]:
     """Draw the title onto a transparent ``width``×``height`` RGBA image."""
     if isinstance(style, str):
@@ -353,6 +385,7 @@ def render_title(
         position_pct=position_pct,
         bottom_limit_px=bottom_limit_px,
         highlight_words=highlight_words,
+        centre_in_band=centre_in_band,
     )
 
     size = layout.font_size

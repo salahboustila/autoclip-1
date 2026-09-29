@@ -121,6 +121,15 @@ class ViralHookSettings(BaseModel):
     #: Handle and fixed hashtags appended to every post caption.
     caption_handle: str = "@michaelsartain"
     fixed_hashtags: list[str] = Field(default_factory=lambda: ["#usa", "#uk", "#canada"])
+    #: "podcast_hook": black 9:16 canvas, title on top, video in the middle,
+    #: captions below. "standard": the normal reframed export.
+    layout: Literal["podcast_hook", "standard"] = "podcast_hook"
+    #: "full_width" shows the whole frame; "tracked" a face-tracked square crop.
+    video_fit: Literal["full_width", "tracked"] = "full_width"
+    title_font: Literal["anton", "montserrat"] = "anton"
+    #: Paint the title's key word (a number, else its longest word) yellow.
+    highlight_title_keyword: bool = True
+    caption_keyword_colour: Literal["green", "yellow"] = "green"
 
 
 class HookTitleSettings(BaseModel):

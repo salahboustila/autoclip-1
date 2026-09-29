@@ -17,7 +17,7 @@ from pathlib import Path
 from ..config import ExportSettings, HookTitleSettings
 from ..system import report
 from . import captions as captions_module
-from . import ffmpeg, hooktitle
+from . import ffmpeg, hooktitle, layouts
 from .captions import CaptionStyle
 from .reframe.croppath import CropPath, segment_crop_filter
 from .transcript import Word
@@ -60,6 +60,22 @@ class ExportRequest:
     #: to the render.
     hook_title: str = ""
     hook_title_settings: HookTitleSettings | None = None
+    #: Render in the Podcast Hook layout (Viral Hook Mode) instead of the
+    #: standard full-bleed crop. Always 9:16.
+    podcast: layouts.PodcastOptions | None = None
+
+    def __post_init__(self) -> None:
+        if self.podcast is not None:
+            self.ratio = "9:16"
+
+    @property
+    def caption_style(self) -> CaptionStyle:
+        """The style captions are actually drawn in, adapted to the layout."""
+        if self.podcast is None:
+            return self.style
+        return layouts.caption_style_for(
+            self.podcast.layout, self.style, keyword=self.podcast.caption_keyword_colour
+        )
 
     @property
     def wants_hook_title(self) -> bool:
@@ -107,6 +123,10 @@ def build_video_filtergraph(
 ) -> str:
     """Build the ``-filter_complex`` video chain for one clip."""
     out_w, out_h = ratio_dimensions(request.ratio)
+    frame_w, frame_h = out_w, out_h
+    if request.podcast is not None:
+        # Segments fill the video box; the box is then padded onto the canvas.
+        _, _, out_w, out_h = request.podcast.layout.video_box
     segments = request.crop_path.segments
     if not segments:
         raise ExportError("The crop path has no segments.")
@@ -147,6 +167,11 @@ def build_video_filtergraph(
     else:
         parts.append(f"{''.join(labels)}concat=n={len(segments)}:v=1:a=0[vcat]")
         current = "[vcat]"
+
+    if request.podcast is not None:
+        _, box_y, _, _ = request.podcast.layout.video_box
+        parts.append(f"{current}pad={frame_w}:{frame_h}:0:{box_y}:color=black,setsar=1[vpad]")
+        current = "[vpad]"
 
     if title_input is not None:
         # A single still frame: overlay's default eof_action=repeat holds it
@@ -196,26 +221,42 @@ def _zoom_filter(zoom: float, out_w: int, out_h: int) -> str:
     return f"zoompan=z='min(zoom+{zoom / 240:.6f},{end_zoom:.4f})':d=1:s={out_w}x{out_h}:fps=30"
 
 
+#: Podcast Hook titles are this much larger than the configured font size.
+PODCAST_TITLE_SCALE = 1.4
+
+
 def _render_hook_title(request: ExportRequest, workspace: Path, out_w: int, out_h: int) -> Path:
     """Draw the hook title to a full-frame PNG, clear of the caption area."""
     settings = request.hook_title_settings or HookTitleSettings()
-    bottom_limit = (
-        hooktitle.caption_top_px(request.style, out_h)
-        if request.burn_captions and request.words
-        else None
-    )
     path = workspace / "hook_title.png"
+    if request.podcast is not None:
+        options = request.podcast
+        kwargs = {
+            "style": options.title_style,
+            # Condensed display type reads smaller than Montserrat at one size.
+            "font_size": round(settings.font_size * PODCAST_TITLE_SCALE),
+            "position_pct": hooktitle.MIN_TOP_PCT,
+            "bottom_limit_px": options.layout.title_limit_px,
+            "centre_in_band": True,
+            "highlight_words": (
+                layouts.title_keyword(request.hook_title)
+                if options.highlight_title_keyword
+                else None
+            ),
+        }
+    else:
+        kwargs = {
+            "style": "boxed",
+            "font_size": settings.font_size,
+            "position_pct": settings.position_pct,
+            "bottom_limit_px": (
+                hooktitle.caption_top_px(request.style, out_h)
+                if request.burn_captions and request.words
+                else None
+            ),
+        }
     try:
-        hooktitle.write_title_png(
-            path,
-            request.hook_title,
-            width=out_w,
-            height=out_h,
-            style="boxed",
-            font_size=settings.font_size,
-            position_pct=settings.position_pct,
-            bottom_limit_px=bottom_limit,
-        )
+        hooktitle.write_title_png(path, request.hook_title, width=out_w, height=out_h, **kwargs)
     except hooktitle.HookTitleError as exc:
         raise ExportError(str(exc)) from exc
     return path
@@ -294,7 +335,7 @@ def export_clip(
         ass_path = captions_module.write_ass(
             workspace / "captions.ass",
             request.words,
-            request.style,
+            request.caption_style,
             width=out_w,
             height=out_h,
             time_offset_s=request.start_s,

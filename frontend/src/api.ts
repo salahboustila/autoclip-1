@@ -167,6 +167,11 @@ export interface Settings {
     speaker_facts: string
     caption_handle: string
     fixed_hashtags: string[]
+    layout: 'podcast_hook' | 'standard'
+    video_fit: 'full_width' | 'tracked'
+    title_font: 'anton' | 'montserrat'
+    highlight_title_keyword: boolean
+    caption_keyword_colour: 'green' | 'yellow'
   }
   hook_title: { enabled: boolean; position_pct: number; font_size: number }
   cleanup: { auto_delete_sources: boolean }
