@@ -150,6 +150,7 @@ export interface Settings {
     crf: number
     write_srt: boolean
   }
+  cleanup: { auto_delete_sources: boolean }
   insecure_secret_storage: boolean
   keys_present: Record<string, boolean>
 }
@@ -255,6 +256,8 @@ export const api = {
 
   cancelJob: (id: string) => request<Job>(`/api/jobs/${id}/cancel`, { method: 'POST' }),
   retryJob: (id: string) => request<Job>(`/api/jobs/${id}/retry`, { method: 'POST' }),
+  deleteJob: (id: string) => request<void>(`/api/jobs/${id}`, { method: 'DELETE' }),
+  downloadAllUrl: (id: string) => `/api/jobs/${id}/download-all`,
 
   listClips: (jobId: string) => request<Clip[]>(`/api/jobs/${jobId}/clips`),
   getClip: (clipId: string) => request<Clip>(`/api/clips/${clipId}`),

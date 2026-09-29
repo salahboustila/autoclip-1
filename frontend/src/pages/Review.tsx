@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import {
   api,
@@ -20,6 +20,7 @@ const RATIOS = ['9:16', '1:1', '16:9'] as const
 
 export function Review() {
   const { jobId } = useParams()
+  const navigate = useNavigate()
   const [job, setJob] = useState<Job | null>(null)
   const [clips, setClips] = useState<Clip[]>([])
   const [styles, setStyles] = useState<CaptionStyle[]>([])
@@ -136,6 +137,22 @@ export function Review() {
     for (const clip of targets) await exportClip(clip)
   }
 
+  const deleteJob = async () => {
+    if (!job) return
+    const ok = window.confirm(
+      `Delete "${job.source?.title || 'this job'}"?\n\nThis permanently removes the source video, ` +
+        'work files, exported clips and all records for this job. It cannot be undone.',
+    )
+    if (!ok) return
+    try {
+      await api.deleteJob(job.id)
+      navigate('/')
+    } catch (err) {
+      setError(err as Error)
+    }
+  }
+
+  const exportedCount = clips.filter((clip) => clip.exports.length > 0).length
   const keptCount = clips.filter((clip) => clip.status === 'kept').length
   const activeStyle = styles.find((style) => style.key === selected?.caption_style)
 
@@ -165,6 +182,14 @@ export function Review() {
           <span className="numeric text-xs text-ink-500">
             {clips.length} clips · {keptCount} kept
           </span>
+          {exportedCount > 0 && (
+            <a href={api.downloadAllUrl(job.id)} download className="btn btn-ghost">
+              Download all clips
+            </a>
+          )}
+          <button onClick={deleteJob} className="btn btn-ghost">
+            Delete job
+          </button>
           <button onClick={exportKept} disabled={keptCount === 0} className="btn btn-primary">
             Export kept
           </button>

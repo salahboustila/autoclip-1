@@ -269,6 +269,26 @@ export function Settings() {
         </label>
       </Section>
 
+      <Section title="Cleanup">
+        <label className="flex items-start gap-3 text-sm text-ink-200">
+          <input
+            type="checkbox"
+            checked={settings.cleanup.auto_delete_sources}
+            onChange={(e) =>
+              patch({ cleanup: { ...settings.cleanup, auto_delete_sources: e.target.checked } })
+            }
+            className="mt-0.5 size-4 accent-sodium-500"
+          />
+          <span>
+            Delete the source video and work files once a job finishes
+            <span className="mt-1 block text-xs text-ink-500">
+              Keeps only the exported clips. A cleaned-up job can no longer be previewed or
+              re-rendered.
+            </span>
+          </span>
+        </label>
+      </Section>
+
       {system && (
         <Section title="This machine">
           <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">

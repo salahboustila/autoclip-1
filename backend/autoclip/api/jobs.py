@@ -6,8 +6,11 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
+from starlette.background import BackgroundTask
 
+from .. import cleanup
 from ..config import load as load_settings
 from ..db import store
 from ..db.models import Job, new_id
@@ -159,3 +162,33 @@ async def job_clips(job_id: str):
     from .clips import list_clips_for_job
 
     return await list_clips_for_job(job_id)
+
+
+@router.delete("/{job_id}", status_code=204)
+async def delete_job(job_id: str) -> None:
+    """Remove a job's source video, work files, exports and database rows."""
+    job = await asyncio.to_thread(store.get_job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    if job.status == "running":
+        raise HTTPException(
+            status_code=409, detail="This job is running. Cancel it before deleting."
+        )
+    await asyncio.to_thread(cleanup.delete_job, job)
+
+
+@router.get("/{job_id}/download-all")
+async def download_all(job_id: str) -> FileResponse:
+    """Every exported clip for a job (plus caption .txt files) as one zip."""
+    job = await asyncio.to_thread(store.get_job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    archive = await asyncio.to_thread(cleanup.build_zip, job_id)
+    if archive is None:
+        raise HTTPException(status_code=404, detail="This job has no exported clips yet.")
+    return FileResponse(
+        archive,
+        media_type="application/zip",
+        filename=f"autoclip-{job_id[:8]}-clips.zip",
+        background=BackgroundTask(archive.unlink, missing_ok=True),
+    )

@@ -157,6 +157,8 @@ def pipeline_result(autoclip_home):
     settings.clips.max_duration_s = 45.0
     settings.export.caption_style = "bold_pop"
     settings.export.ratio = "9:16"
+    # These tests inspect the work files after the run, which cleanup would delete.
+    settings.cleanup.auto_delete_sources = False
 
     job = store.create_job(Job(id=new_id(), source_id=source.id, provider="scripted", settings={}))
 

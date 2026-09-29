@@ -71,6 +71,12 @@ def list_sources(limit: int = 50) -> list[Source]:
     return [Source.from_row(r) for r in rows]
 
 
+def delete_source(source_id: str) -> None:
+    """Delete a source row. Jobs referencing it cascade, so callers check first."""
+    with connection() as conn:
+        conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
+
+
 # --------------------------------------------------------------------------
 # Jobs
 # --------------------------------------------------------------------------
@@ -107,6 +113,18 @@ def get_job(job_id: str) -> Job | None:
     with connection() as conn:
         row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     return Job.from_row(row) if row else None
+
+
+def delete_job(job_id: str) -> None:
+    """Delete a job; clips, edits, exports and the transcript row cascade."""
+    with connection() as conn:
+        conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+
+
+def list_jobs_for_source(source_id: str) -> list[Job]:
+    with connection() as conn:
+        rows = conn.execute("SELECT * FROM jobs WHERE source_id = ?", (source_id,)).fetchall()
+    return [Job.from_row(r) for r in rows]
 
 
 def list_jobs(limit: int = 50, status: JobStatus | None = None) -> list[Job]:

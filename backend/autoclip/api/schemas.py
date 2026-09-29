@@ -231,6 +231,7 @@ class SettingsOut(BaseModel):
     clips: dict[str, Any]
     ingest: dict[str, Any]
     export: dict[str, Any]
+    cleanup: dict[str, Any] = Field(default_factory=dict)
     insecure_secret_storage: bool
     #: Which providers have a key stored. The keys themselves never leave the
     #: keyring, so the UI shows presence, not value.
@@ -244,6 +245,7 @@ class SettingsIn(BaseModel):
     clips: dict[str, Any] | None = None
     ingest: dict[str, Any] | None = None
     export: dict[str, Any] | None = None
+    cleanup: dict[str, Any] | None = None
 
 
 class SecretIn(BaseModel):

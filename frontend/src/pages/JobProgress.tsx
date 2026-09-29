@@ -59,6 +59,17 @@ export function JobProgress() {
     }
   }
 
+  const remove = async () => {
+    if (!window.confirm('Delete this job and its files? This cannot be undone.')) return
+    setActionError(null)
+    try {
+      await api.deleteJob(job.id)
+      navigate('/')
+    } catch (err) {
+      setActionError(err as Error)
+    }
+  }
+
   return (
     <div className="pt-14">
       <div className="rise flex flex-wrap items-baseline justify-between gap-6 border-b border-ink-800 pb-6">
@@ -87,9 +98,14 @@ export function JobProgress() {
             </button>
           )}
           {(job.status === 'failed' || job.status === 'cancelled') && (
-            <button onClick={retry} className="btn btn-primary">
-              Retry
-            </button>
+            <>
+              <button onClick={remove} className="btn btn-ghost">
+                Delete job
+              </button>
+              <button onClick={retry} className="btn btn-primary">
+                Retry
+              </button>
+            </>
           )}
           {job.status === 'done' && (
             <button onClick={() => navigate(`/jobs/${job.id}/clips`)} className="btn btn-primary">

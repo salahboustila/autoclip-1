@@ -101,6 +101,13 @@ class ExportSettings(BaseModel):
     write_srt: bool = False
 
 
+class CleanupSettings(BaseModel):
+    #: Once a job's export finishes, delete its source video and intermediate
+    #: work files, keeping only the final clips. Frees the most disk; a deleted
+    #: source means the job can no longer be re-rendered or previewed.
+    auto_delete_sources: bool = True
+
+
 class Settings(BaseModel):
     """Top-level persisted settings."""
 
@@ -117,6 +124,7 @@ class Settings(BaseModel):
     clips: ClipSettings = Field(default_factory=ClipSettings)
     ingest: IngestSettings = Field(default_factory=IngestSettings)
     export: ExportSettings = Field(default_factory=ExportSettings)
+    cleanup: CleanupSettings = Field(default_factory=CleanupSettings)
 
     #: Set when secrets had to be written to config.json because no keyring
     #: backend was usable. Surfaced as a warning in the UI and in `doctor`.

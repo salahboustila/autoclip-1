@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .. import paths
+from .. import cleanup, paths
 from ..config import Settings
 from ..config import load as load_settings
 from ..db import store
@@ -194,7 +194,21 @@ class PipelineRunner:
             raise
 
         store.update_job(self.job.id, status="done", progress=1.0, finished_at=utcnow())
+        self._auto_cleanup()
         return clips
+
+    def _auto_cleanup(self) -> None:
+        """Delete the source and work files, keeping only the finished clips.
+
+        Runs after the job is marked done and never fails it: the clips exist,
+        and a leftover file is a disk-space nuisance, not a job failure.
+        """
+        if not self.settings.cleanup.auto_delete_sources:
+            return
+        try:
+            cleanup.purge_after_export(self.job, self.source)
+        except Exception:
+            log.exception("Post-export cleanup failed for job %s.", self.job.id)
 
     # -- stages ------------------------------------------------------------
 

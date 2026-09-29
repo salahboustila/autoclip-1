@@ -180,6 +180,13 @@ async def export_clip(clip_id: str, payload: ExportRequestIn) -> ExportOut:
     if job is None or source is None:
         raise HTTPException(status_code=404, detail="The clip's source is missing.")
 
+    if not Path(source.path).exists():
+        raise HTTPException(
+            status_code=410,
+            detail="The source video was deleted after export (cleanup.auto_delete_sources), "
+            "so this clip can't be re-rendered.",
+        )
+
     try:
         style = captions_module.get_style(payload.style)
     except ValueError as exc:
