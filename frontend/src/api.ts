@@ -19,6 +19,8 @@ export interface Source {
   has_audio: boolean
   has_video: boolean
   created_at: string
+  /** False once the video was deleted by auto-cleanup. */
+  media_available: boolean
 }
 
 export type JobStatus = 'queued' | 'running' | 'failed' | 'done' | 'cancelled'
@@ -36,6 +38,8 @@ export interface Job {
   started_at: string | null
   finished_at: string | null
   source: Source | null
+  /** Created with Viral Hook Mode (Podcast) on. */
+  viral_hook: boolean
 }
 
 export interface ExportRecord {

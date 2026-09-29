@@ -158,6 +158,49 @@ Everything the UI does is also on the CLI:
 
 Fonts are bundled under the SIL Open Font License, so nothing is fetched at runtime.
 
+### Hook titles
+
+Any clip can carry a **hook title**: a headline burned over the whole clip in
+a white rounded box, 13% from the top (never above 12%), at most two lines,
+kept clear of the captions. Edit it on the review page. Emoji render in
+colour. Settings: `hook_title.enabled`, `hook_title.position_pct`,
+`hook_title.font_size`.
+
+### Viral Hook Mode (Podcast)
+
+An optional preset for podcast clipping campaigns. Switch it on per job on
+the New page, or by default under Settings. It is off by default, and with it
+off nothing below changes.
+
+- **Scoring.** A dedicated prompt prefers money, dating, men vs women,
+  "high-value", status, stats and polls, and controversial takes. Each
+  candidate is rated on hook strength, comment potential, standalone clarity,
+  and whether it states a number, combined into the usual 0-100 score
+  (`clips.min_score` still applies). A claimed number only counts if the
+  transcript contains one.
+- **Boundaries.** 25-50 s clips that open on the strongest sentence. Leading
+  filler and, with diarization, the host's question are trimmed in code.
+- **Titles and captions.** Three hook titles per clip in five proven patterns,
+  the best applied and two kept as alternatives, plus a post caption saved as
+  `clip_XX_caption.txt`. **Titles are checked against the clip's transcript:**
+  every number and content word must be something the speaker says (or is in
+  `viral_hook.speaker_facts`), otherwise the title is dropped and replaced
+  with one cut from the clip's own words.
+- **Podcast Hook layout.** A black 9:16 canvas with the title in white Anton
+  on top (key word in yellow), the video full width in the middle, and
+  word-by-word captions below with one keyword per line in green. No
+  watermark, no handle.
+
+Settings live under `viral_hook` in `config.json`. Rejected titles and the
+reasons are traced to `work/<job>/highlights/copy_XX.json`.
+
+### Cleanup
+
+`cleanup.auto_delete_sources` (on by default) deletes a job's source video
+and work files once its clips are exported, keeping only the clips. A
+cleaned-up job can't be previewed or re-rendered. The review page also has
+**Download all clips** (one zip, caption files included) and **Delete job**.
+
 ## Troubleshooting
 
 Everything here is a real failure hit during development, not hypothetical.

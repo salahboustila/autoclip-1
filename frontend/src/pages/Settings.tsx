@@ -269,6 +269,110 @@ export function Settings() {
         </label>
       </Section>
 
+      <Section title="Viral Hook Mode (Podcast)">
+        {(() => {
+          const viral = settings.viral_hook
+          const setViral = (update: Partial<typeof viral>) =>
+            patch({ viral_hook: { ...viral, ...update } })
+          return (
+            <>
+              <label className="flex items-start gap-3 text-sm text-ink-200">
+                <input
+                  type="checkbox"
+                  checked={viral.enabled}
+                  onChange={(e) => setViral({ enabled: e.target.checked })}
+                  className="mt-0.5 size-4 accent-sodium-500"
+                />
+                <span>
+                  On by default for new jobs
+                  <span className="mt-1 block text-xs text-ink-500">
+                    It can also be switched per job on the New page.
+                  </span>
+                </span>
+              </label>
+              <div className="mt-5 grid gap-5 sm:grid-cols-3">
+                <NumberField
+                  label="Clips per video"
+                  value={viral.top_n}
+                  onCommit={(value) => setViral({ top_n: value })}
+                />
+                <NumberField
+                  label="Min length (s)"
+                  value={viral.min_duration_s}
+                  onCommit={(value) => setViral({ min_duration_s: value })}
+                />
+                <NumberField
+                  label="Max length (s)"
+                  value={viral.max_duration_s}
+                  onCommit={(value) => setViral({ max_duration_s: value })}
+                />
+              </div>
+              <div className="mt-5">
+                <Field
+                  label="Speaker facts"
+                  hint="True facts titles may use, e.g. “The host is a licensed therapist.” Titles are otherwise limited to what is said in each clip, so leave this empty unless it's true."
+                  value={viral.speaker_facts}
+                  placeholder="None"
+                  onCommit={(value) => setViral({ speaker_facts: value })}
+                />
+              </div>
+              <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                <Field
+                  label="Caption handle"
+                  value={viral.caption_handle}
+                  onCommit={(value) => setViral({ caption_handle: value })}
+                />
+                <Field
+                  label="Fixed hashtags"
+                  value={viral.fixed_hashtags.join(' ')}
+                  onCommit={(value) =>
+                    setViral({ fixed_hashtags: value.split(/\s+/).filter(Boolean) })
+                  }
+                />
+                <Select
+                  label="Layout"
+                  value={viral.layout}
+                  onChange={(value) => setViral({ layout: value as typeof viral.layout })}
+                  options={['podcast_hook', 'standard']}
+                  labels={{ podcast_hook: 'Podcast Hook (title · video · captions)', standard: 'Standard reframe' }}
+                />
+                <Select
+                  label="Video"
+                  value={viral.video_fit}
+                  onChange={(value) => setViral({ video_fit: value as typeof viral.video_fit })}
+                  options={['full_width', 'tracked']}
+                  labels={{ full_width: 'Full width', tracked: 'Face-tracked square' }}
+                />
+                <Select
+                  label="Title font"
+                  value={viral.title_font}
+                  onChange={(value) => setViral({ title_font: value as typeof viral.title_font })}
+                  options={['anton', 'montserrat']}
+                  labels={{ anton: 'Anton', montserrat: 'Montserrat ExtraBold' }}
+                />
+                <Select
+                  label="Caption keyword colour"
+                  value={viral.caption_keyword_colour}
+                  onChange={(value) =>
+                    setViral({ caption_keyword_colour: value as typeof viral.caption_keyword_colour })
+                  }
+                  options={['green', 'yellow']}
+                />
+              </div>
+              <label className="mt-5 flex items-center gap-3 text-sm text-ink-200">
+                <input
+                  type="checkbox"
+                  checked={viral.highlight_title_keyword}
+                  onChange={(e) => setViral({ highlight_title_keyword: e.target.checked })}
+                  className="size-4 accent-sodium-500"
+                />
+                Highlight the title's key word in yellow
+              </label>
+            </>
+          )
+        })()}
+      </Section>
+
       <Section title="Hook title">
         <label className="flex items-start gap-3 text-sm text-ink-200">
           <input

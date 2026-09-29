@@ -8,6 +8,7 @@ export URLs) that don't belong in storage.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -29,6 +30,9 @@ class SourceOut(BaseModel):
     has_audio: bool
     has_video: bool
     created_at: str
+    #: False once the video file is gone (cleanup.auto_delete_sources), so the
+    #: UI can hide the preview and re-render controls.
+    media_available: bool = True
 
     @classmethod
     def of(cls, source: models.Source) -> SourceOut:
@@ -48,6 +52,7 @@ class SourceOut(BaseModel):
             has_audio=source.has_audio,
             has_video=source.has_video,
             created_at=source.created_at,
+            media_available=Path(source.path).exists(),
         )
 
 
@@ -90,6 +95,8 @@ class JobOut(BaseModel):
     started_at: str | None = None
     finished_at: str | None = None
     source: SourceOut | None = None
+    #: The job was created with Viral Hook Mode (Podcast) on.
+    viral_hook: bool = False
 
     @classmethod
     def of(cls, job: models.Job, source: models.Source | None = None) -> JobOut:
@@ -106,6 +113,7 @@ class JobOut(BaseModel):
             started_at=job.started_at,
             finished_at=job.finished_at,
             source=SourceOut.of(source) if source else None,
+            viral_hook=bool((job.settings.get("viral_hook") or {}).get("enabled")),
         )
 
 

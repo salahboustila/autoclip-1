@@ -14,7 +14,7 @@ import {
 import { CaptionEditor } from '../components/CaptionEditor'
 import { ClipPlayer } from '../components/ClipPlayer'
 import { ErrorNote } from '../components/ErrorNote'
-import { HookTitleField } from '../components/HookTitleField'
+import { HookCopyPanel } from '../components/HookCopyPanel'
 import { TrimBar } from '../components/TrimBar'
 
 const RATIOS = ['9:16', '1:1', '16:9'] as const
@@ -77,10 +77,14 @@ export function Review() {
     }
   }
 
-  const saveHookTitle = async (hookTitle: string) => {
+  const saveCopy = async (patch: {
+    hook_title?: string
+    hook_title_alts?: string[]
+    post_caption?: string
+  }) => {
     if (!selected) return
     try {
-      patchClip(await api.patchClip(selected.id, { hook_title: hookTitle }))
+      patchClip(await api.patchClip(selected.id, patch))
     } catch (err) {
       setError(err as Error)
     }
@@ -162,6 +166,10 @@ export function Review() {
     }
   }
 
+  // Auto-cleanup removes the source once the clips exist; preview, trim and
+  // re-render all need it.
+  const mediaAvailable = job?.source?.media_available ?? true
+
   const exportedCount = clips.filter((clip) => clip.exports.length > 0).length
   const keptCount = clips.filter((clip) => clip.status === 'kept').length
   const activeStyle = styles.find((style) => style.key === selected?.caption_style)
@@ -200,7 +208,11 @@ export function Review() {
           <button onClick={deleteJob} className="btn btn-ghost">
             Delete job
           </button>
-          <button onClick={exportKept} disabled={keptCount === 0} className="btn btn-primary">
+          <button
+            onClick={exportKept}
+            disabled={keptCount === 0 || !mediaAvailable}
+            className="btn btn-primary"
+          >
             Export kept
           </button>
         </div>
@@ -241,7 +253,10 @@ export function Review() {
 
           {/* Player + trim */}
           <section className="space-y-8">
-            {selected && jobId && (
+            {selected && jobId && !mediaAvailable && (
+              <SourceDeleted clip={selected} />
+            )}
+            {selected && jobId && mediaAvailable && (
               <>
                 <ClipPlayer
                   src={api.mediaUrl(jobId)}
@@ -268,7 +283,17 @@ export function Review() {
           <section className="space-y-10">
             {selected && (
               <>
-                <HookTitleField value={selected.hook_title} onSave={saveHookTitle} />
+                <HookCopyPanel
+                  clip={selected}
+                  onPatch={saveCopy}
+                  onRerender={() => exportClip(selected)}
+                  rerendering={exporting.has(selected.id)}
+                  rerenderBlocked={
+                    mediaAvailable
+                      ? null
+                      : 'The source video was deleted after export, so this clip can no longer be re-rendered.'
+                  }
+                />
 
                 <div>
                   <p className="eyebrow">Why this clip</p>
@@ -318,26 +343,32 @@ export function Review() {
 
                 <div>
                   <p className="eyebrow border-b border-ink-800 pb-2">Aspect ratio</p>
-                  <div className="mt-3 flex gap-2">
-                    {RATIOS.map((ratio) => (
-                      <button
-                        key={ratio}
-                        onClick={() => setRatio(selected, ratio)}
-                        className={[
-                          'numeric btn',
-                          ratio === selected.ratio ? 'btn-primary' : 'btn-ghost',
-                        ].join(' ')}
-                      >
-                        {ratio}
-                      </button>
-                    ))}
-                  </div>
+                  {job.viral_hook ? (
+                    <p className="mt-2 text-xs text-ink-500">
+                      Viral Hook jobs always render 9:16 in the Podcast Hook layout.
+                    </p>
+                  ) : (
+                    <div className="mt-3 flex gap-2">
+                      {RATIOS.map((ratio) => (
+                        <button
+                          key={ratio}
+                          onClick={() => setRatio(selected, ratio)}
+                          className={[
+                            'numeric btn',
+                            ratio === selected.ratio ? 'btn-primary' : 'btn-ghost',
+                          ].join(' ')}
+                        >
+                          {ratio}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t border-ink-800 pt-6">
                   <button
                     onClick={() => exportClip(selected)}
-                    disabled={exporting.has(selected.id)}
+                    disabled={exporting.has(selected.id) || !mediaAvailable}
                     className="btn btn-primary w-full"
                   >
                     {exporting.has(selected.id) ? 'Rendering…' : 'Export this clip'}
@@ -370,6 +401,28 @@ export function Review() {
           </section>
         </div>
       )}
+    </div>
+  )
+}
+
+function SourceDeleted({ clip }: { clip: Clip }) {
+  const latest = clip.exports[0]
+  return (
+    <div className="space-y-4">
+      {latest ? (
+        <video
+          key={latest.id}
+          src={latest.download_url}
+          controls
+          playsInline
+          className="mx-auto aspect-[9/16] max-h-[70vh] bg-black"
+        />
+      ) : null}
+      <p className="text-sm leading-relaxed text-ink-400">
+        The source video was deleted after export (Settings → Cleanup), so this clip can't be
+        previewed, trimmed or re-rendered.{' '}
+        {latest ? 'Above is the exported file.' : 'It has no exported file.'}
+      </p>
     </div>
   )
 }
@@ -416,9 +469,12 @@ function ClipRow({
 
       <div className="min-w-0">
         <p className="truncate text-[0.9375rem] leading-snug text-ink-100">
-          {clip.title || 'Untitled clip'}
+          {clip.hook_title || clip.title || 'Untitled clip'}
         </p>
         <div className="mt-1 flex items-baseline gap-3">
+          {clip.topic && (
+            <span className="text-xs uppercase tracking-wide text-sodium-500">{clip.topic}</span>
+          )}
           <span className="numeric text-xs text-ink-500">{formatDuration(clip.duration_s)}</span>
           {clip.user_trimmed && <span className="text-xs text-ink-600">trimmed</span>}
           {clip.low_confidence && (

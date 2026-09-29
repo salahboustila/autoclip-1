@@ -100,6 +100,11 @@ export function Ingest() {
             Only download video you own or have the rights to process.
           </p>
 
+          <ViralHookToggle
+            on={overrides.viral_hook ?? false}
+            onChange={(on) => setOverrides({ ...overrides, viral_hook: on || undefined })}
+          />
+
           <AdvancedOptions
             open={advancedOpen}
             onToggle={() => setAdvancedOpen((v) => !v)}
@@ -178,6 +183,39 @@ export function Ingest() {
   )
 }
 
+/**
+ * Viral Hook Mode is a whole preset — scoring, clip length, titles, captions
+ * and layout — so it gets a visible switch rather than a row in Options.
+ */
+function ViralHookToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <label
+      className={[
+        'mt-6 flex cursor-pointer items-start gap-3 border px-4 py-3 transition-colors duration-200',
+        on ? 'border-sodium-500 bg-ink-850/60' : 'border-ink-800 hover:border-ink-700',
+      ].join(' ')}
+    >
+      <input
+        type="checkbox"
+        role="switch"
+        aria-checked={on}
+        checked={on}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-1 size-4 accent-sodium-500"
+      />
+      <span>
+        <span className="text-sm font-medium text-ink-100">Viral Hook Mode (Podcast)</span>
+        <span className="mt-1 block text-xs leading-relaxed text-ink-500">
+          Picks the most provocative 25–50 s moments (money, dating, men vs women, stats, hot
+          takes), opens on the strongest sentence, writes 3 hook titles and a post caption per
+          clip, and renders the Podcast Hook layout: title on top, video in the middle, captions
+          below.
+        </span>
+      </span>
+    </label>
+  )
+}
+
 function AdvancedOptions({
   open,
   onToggle,
@@ -253,7 +291,7 @@ function AdvancedOptions({
               <NumberField
                 label="Min length (s)"
                 value={overrides.min_duration_s}
-                placeholder="20"
+                placeholder={overrides.viral_hook ? '25' : '20'}
                 min={5}
                 max={300}
                 onChange={(v) => set('min_duration_s', v)}
@@ -261,7 +299,7 @@ function AdvancedOptions({
               <NumberField
                 label="Max length (s)"
                 value={overrides.max_duration_s}
-                placeholder="90"
+                placeholder={overrides.viral_hook ? '50' : '90'}
                 min={5}
                 max={300}
                 onChange={(v) => set('max_duration_s', v)}

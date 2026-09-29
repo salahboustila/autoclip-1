@@ -122,6 +122,18 @@ async def patch_clip(clip_id: str, payload: ClipPatchIn) -> ClipOut:
         first, last = transcript.indices_in_range(start_s, end_s)
         start_word, end_word = first, max(first, last - 1)
 
+    hook_title = " ".join(payload.hook_title.split()) if payload.hook_title is not None else None
+    alts = (
+        [" ".join(t.split()) for t in payload.hook_title_alts if t.strip()]
+        if payload.hook_title_alts is not None
+        else None
+    )
+    if hook_title is not None:
+        # The current title is never also listed as its own alternative.
+        remaining = alts if alts is not None else clip.hook_title_alts
+        if hook_title in remaining:
+            alts = [t for t in remaining if t != hook_title]
+
     await asyncio.to_thread(
         store.update_clip,
         clip_id,
@@ -130,12 +142,8 @@ async def patch_clip(clip_id: str, payload: ClipPatchIn) -> ClipOut:
         start_word=start_word,
         end_word=end_word,
         title=payload.title,
-        hook_title=" ".join(payload.hook_title.split()) if payload.hook_title is not None else None,
-        hook_title_alts=(
-            [" ".join(t.split()) for t in payload.hook_title_alts if t.strip()]
-            if payload.hook_title_alts is not None
-            else None
-        ),
+        hook_title=hook_title,
+        hook_title_alts=alts,
         post_caption=payload.post_caption.strip() if payload.post_caption is not None else None,
         status=payload.status,
         user_trimmed=True if trimmed else None,

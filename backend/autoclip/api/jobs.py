@@ -47,6 +47,15 @@ def _apply_overrides(settings, overrides: JobSettingsIn):
         merged.export.ratio = overrides.ratio
     if overrides.viral_hook is not None:
         merged.viral_hook.enabled = overrides.viral_hook
+    if merged.viral_hook.enabled:
+        # Viral Hook Mode has its own count and length; the job's overrides
+        # apply to whichever mode is active.
+        if overrides.max_clips is not None:
+            merged.viral_hook.top_n = overrides.max_clips
+        if overrides.min_duration_s is not None:
+            merged.viral_hook.min_duration_s = overrides.min_duration_s
+        if overrides.max_duration_s is not None:
+            merged.viral_hook.max_duration_s = overrides.max_duration_s
 
     return merged
 
@@ -58,7 +67,8 @@ async def create_job(payload: JobCreateIn) -> JobOut:
         raise HTTPException(status_code=404, detail="Source not found.")
 
     settings = _apply_overrides(load_settings(), payload.settings)
-    if settings.clips.min_duration_s >= settings.clips.max_duration_s:
+    lengths = settings.viral_hook if settings.viral_hook.enabled else settings.clips
+    if lengths.min_duration_s >= lengths.max_duration_s:
         raise HTTPException(
             status_code=400, detail="Minimum clip length must be below the maximum."
         )
