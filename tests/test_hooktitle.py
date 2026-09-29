@@ -185,9 +185,7 @@ class TestMigrationAndApi:
 
         assert client.get(f"/api/clips/{clip.id}").json()["hook_title"] == ""
 
-        response = client.patch(
-            f"/api/clips/{clip.id}", json={"hook_title": "  Learn   This 🤔 "}
-        )
+        response = client.patch(f"/api/clips/{clip.id}", json={"hook_title": "  Learn   This 🤔 "})
         assert response.status_code == 200
         assert response.json()["hook_title"] == "Learn This 🤔"
         assert store.get_clip(clip.id).hook_title == "Learn This 🤔"
