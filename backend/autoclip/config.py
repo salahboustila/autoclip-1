@@ -144,6 +144,9 @@ class CampaignSettings(BaseModel):
     preset: str = "jack_neel"
     #: The resolved preset, filled in per job. Always empty in config.json.
     rules: dict[str, Any] | None = None
+    #: Result of checking the job's source against the preset's rules
+    #: (``{"status": "verified" | "not_verified", "message": ...}``), per job.
+    source_check: dict[str, Any] | None = None
 
 
 class HookTitleSettings(BaseModel):

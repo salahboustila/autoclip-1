@@ -98,6 +98,7 @@ async def put_settings(payload: SettingsIn) -> SettingsOut:
 
     # The per-job snapshot never belongs in the saved defaults.
     settings.campaign.rules = None
+    settings.campaign.source_check = None
     if settings.campaign.enabled:
         try:
             campaigns.load_preset(settings.campaign.preset)

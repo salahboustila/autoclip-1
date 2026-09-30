@@ -76,8 +76,14 @@ class ClipCandidate(BaseModel):
     comment_potential: int | None = None
     standalone_clarity: int | None = None
     has_number: bool | None = None
+    # Podcast Campaign Mode only: four criteria on a 0-10 scale.
+    question_text: str = ""
+    question_hook: float | None = None
+    controversy: float | None = None
+    number_stat: float | None = None
+    clarity: float | None = None
 
-    @field_validator("title", "hook", "reason", "topic", mode="before")
+    @field_validator("title", "hook", "reason", "topic", "question_text", mode="before")
     @classmethod
     def _coerce_to_string(cls, value: Any) -> str:
         # Models occasionally return null or a number where text was asked for.
@@ -103,6 +109,20 @@ class ClipCandidate(BaseModel):
         if value is None:
             return None
         return cls._coerce_score(value)
+
+    @field_validator("question_hook", "controversy", "number_stat", "clarity", mode="before")
+    @classmethod
+    def _coerce_ten(cls, value: Any) -> float | None:
+        """A 0-10 criterion. A value on 0-100 (models drift) is scaled down."""
+        if value is None:
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        if number > 10:
+            number /= 10
+        return max(0.0, min(10.0, number))
 
     @field_validator("has_number", mode="before")
     @classmethod
@@ -160,6 +180,11 @@ class DetectionConfig:
     fallback_clips: int = 0
     #: Viral Hook Mode: combined four-criterion scoring and strict openings.
     viral_hook: bool = False
+    #: Extra ``<<KEY>>`` placeholders filled into the system prompt.
+    prompt_vars: dict[str, str] = field(default_factory=dict)
+    #: Podcast Campaign Mode: an object deciding each clip's start, score and
+    #: extra fields (see ``campaigns.question_first``). None everywhere else.
+    clip_policy: Any = None
 
 
 @dataclass
@@ -313,7 +338,10 @@ def render_system_prompt(template: str, config: DetectionConfig) -> str:
             "nothing worth clipping; saying so is a correct answer."
         )
         empty_answer = 'If nothing in this section is worth clipping, return {"clips": []}.'
-    return template.replace(SCORE_RULE_TOKEN, rule).replace(EMPTY_ANSWER_TOKEN, empty_answer)
+    rendered = template.replace(SCORE_RULE_TOKEN, rule).replace(EMPTY_ANSWER_TOKEN, empty_answer)
+    for key, value in config.prompt_vars.items():
+        rendered = rendered.replace(f"<<{key}>>", value)
+    return rendered
 
 
 def render_window_prompt(window: TranscriptWindow, config: DetectionConfig) -> str:

@@ -52,6 +52,7 @@ def _apply_overrides(settings, overrides: JobSettingsIn):
         if overrides.campaign_preset:
             merged.campaign.preset = overrides.campaign_preset
     merged.campaign.rules = None
+    merged.campaign.source_check = None
     # The campaign preset goes on before the count/length overrides below, so
     # an explicit per-job value still wins over the preset's.
     merged = campaigns.apply(merged)

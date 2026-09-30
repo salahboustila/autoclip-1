@@ -151,6 +151,8 @@ class Clip:
     hook_title_alts: list[str] = field(default_factory=list)
     #: Social post caption (question line, handle, hashtags). Empty if none.
     post_caption: str = ""
+    #: Podcast Campaign Mode: the host's question the clip opens on.
+    question_text: str = ""
     created_at: str = field(default_factory=utcnow)
 
     @property
@@ -178,6 +180,7 @@ class Clip:
             topic=row["topic"],
             hook_title_alts=json.loads(row["hook_title_alts"] or "[]"),
             post_caption=row["post_caption"],
+            question_text=row["question_text"],
             created_at=row["created_at"],
         )
 

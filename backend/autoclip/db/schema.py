@@ -125,6 +125,11 @@ def _migration_v5(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE clips ADD COLUMN post_caption TEXT NOT NULL DEFAULT ''")
 
 
+def _migration_v6(conn: sqlite3.Connection) -> None:
+    # Podcast Campaign Mode: the host's question each clip opens on.
+    conn.execute("ALTER TABLE clips ADD COLUMN question_text TEXT NOT NULL DEFAULT ''")
+
+
 #: Ordered migrations. Index + 1 is the resulting ``user_version``.
 #: Append only — never edit a migration that has shipped.
 MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
@@ -133,6 +138,7 @@ MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _migration_v3,
     _migration_v4,
     _migration_v5,
+    _migration_v6,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

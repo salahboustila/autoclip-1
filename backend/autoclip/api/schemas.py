@@ -169,6 +169,7 @@ class ClipOut(BaseModel):
     topic: str = ""
     hook_title_alts: list[str] = Field(default_factory=list)
     post_caption: str = ""
+    question_text: str = ""
     caption_style: str = "bold_pop"
     ratio: str = "9:16"
     exports: list[ExportOut] = Field(default_factory=list)
@@ -201,6 +202,7 @@ class ClipOut(BaseModel):
             topic=clip.topic,
             hook_title_alts=clip.hook_title_alts,
             post_caption=clip.post_caption,
+            question_text=clip.question_text,
             caption_style=edit.caption_style if edit else "bold_pop",
             ratio=edit.ratio if edit else "9:16",
             exports=[ExportOut.of(e) for e in (exports or [])],

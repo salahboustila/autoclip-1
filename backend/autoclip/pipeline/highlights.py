@@ -179,8 +179,13 @@ async def detect(
         silences=silences or [],
         min_score=config.min_score,
     )
+    policy = config.clip_policy
+    if policy is not None and trace_dir is not None:
+        policy.write_trace(trace_dir, transcript)
     if clips:
         return clips
+    if policy is not None and not policy.allow_fallback:
+        raise HighlightError(policy.empty_message())
 
     log.warning(
         "Nothing scored %d or higher; asking for the best moments regardless of score.",
@@ -312,6 +317,7 @@ def build_clips(
     # In Viral Hook Mode the cut-off applies to the combined score, which is
     # only known once each clip's final text is; it is enforced further down.
     viral_cutoff = min_score if config.viral_hook else None
+    policy = config.clip_policy
     if min_score is not None and viral_cutoff is None:
         kept = [c for c in candidates if c.score >= min_score]
         if len(kept) < len(candidates):
@@ -332,7 +338,13 @@ def build_clips(
             silences=silences or [],
             min_duration_s=config.min_duration_s,
             max_duration_s=config.max_duration_s,
-            trim_start=viral.trim_opening if config.viral_hook else None,
+            trim_start=(
+                policy.trim_start
+                if policy is not None
+                else viral.trim_opening
+                if config.viral_hook
+                else None
+            ),
         )
         if boundary is None:
             log.debug(
@@ -343,7 +355,15 @@ def build_clips(
             continue
 
         score = candidate.score
-        if config.viral_hook:
+        if policy is not None:
+            policy_score = policy.score(candidate, transcript, boundary)
+            if policy_score is None:
+                continue
+            score = policy_score
+            if viral_cutoff is not None and score < viral_cutoff:
+                log.info("Dropped a campaign candidate scoring %d (< %d).", score, viral_cutoff)
+                continue
+        elif config.viral_hook:
             clip_text = transcript.text_between(boundary.start_word, boundary.end_word)
             score = viral.combined_score(candidate, clip_text)
             if viral_cutoff is not None and score < viral_cutoff:
@@ -352,25 +372,26 @@ def build_clips(
                 )
                 continue
 
-        clips.append(
-            Clip(
-                id=new_id(),
-                job_id=job_id,
-                start_s=boundary.start_s,
-                end_s=boundary.end_s,
-                start_word=boundary.start_word,
-                end_word=boundary.end_word,
-                title=candidate.title.strip()
-                or transcript.text_between(
-                    boundary.start_word, min(boundary.start_word + 8, boundary.end_word)
-                ),
-                hook=candidate.hook.strip(),
-                score=score,
-                reason=candidate.reason.strip(),
-                low_confidence=low_confidence,
-                topic=candidate.topic.strip() if config.viral_hook else "",
-            )
+        clip = Clip(
+            id=new_id(),
+            job_id=job_id,
+            start_s=boundary.start_s,
+            end_s=boundary.end_s,
+            start_word=boundary.start_word,
+            end_word=boundary.end_word,
+            title=candidate.title.strip()
+            or transcript.text_between(
+                boundary.start_word, min(boundary.start_word + 8, boundary.end_word)
+            ),
+            hook=candidate.hook.strip(),
+            score=score,
+            reason=candidate.reason.strip(),
+            low_confidence=low_confidence,
+            topic=candidate.topic.strip() if config.viral_hook else "",
         )
+        if policy is not None:
+            policy.annotate(clip, candidate, transcript)
+        clips.append(clip)
 
     # Refinement can move edges enough that two survivors now overlap.
     clips = _dedupe_clips(clips)
