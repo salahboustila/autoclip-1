@@ -52,6 +52,8 @@ dependencies = [
   "pysubs2>=1.7",
   # Hook titles: drawn with Pillow because libass cannot render colour emoji.
   "pillow>=10.1",
+  # Podcast Campaign Mode presets (presets/*.yaml).
+  "pyyaml>=6.0",
   # Providers
   "anthropic>=0.40",
   "openai>=1.55",

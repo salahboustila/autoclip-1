@@ -7,7 +7,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from .. import config, models, system
+from .. import campaigns, config, models, system
 from ..providers import PROVIDERS, build_provider
 from ..providers.base import ProviderStatus
 from .schemas import ProviderStatusOut, SecretIn, SettingsIn, SettingsOut, SystemOut
@@ -27,6 +27,7 @@ def _settings_out(settings: config.Settings) -> SettingsOut:
         ingest=payload["ingest"],
         export=payload["export"],
         viral_hook=payload["viral_hook"],
+        campaign=payload["campaign"],
         hook_title=payload["hook_title"],
         cleanup=payload["cleanup"],
         insecure_secret_storage=payload["insecure_secret_storage"],
@@ -56,7 +57,16 @@ async def put_settings(payload: SettingsIn) -> SettingsOut:
             )
         settings.active_provider = updates["active_provider"]
 
-    for section in ("whisper", "clips", "ingest", "export", "viral_hook", "hook_title", "cleanup"):
+    for section in (
+        "whisper",
+        "clips",
+        "ingest",
+        "export",
+        "viral_hook",
+        "campaign",
+        "hook_title",
+        "cleanup",
+    ):
         if section in updates:
             current = getattr(settings, section)
             try:
@@ -85,6 +95,14 @@ async def put_settings(payload: SettingsIn) -> SettingsOut:
         raise HTTPException(
             status_code=400, detail="Viral Hook minimum length must be below the maximum."
         )
+
+    # The per-job snapshot never belongs in the saved defaults.
+    settings.campaign.rules = None
+    if settings.campaign.enabled:
+        try:
+            campaigns.load_preset(settings.campaign.preset)
+        except campaigns.PresetError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     config.save(settings)
     return _settings_out(settings)

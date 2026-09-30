@@ -1,0 +1,79 @@
+# Podcast Campaign Mode preset: Jack Neel Podcast (Content Rewards).
+#
+# Copy this file to add another campaign. Files in ~/.autoclip/presets/ with
+# the same name override the bundled ones, so a campaign can be tuned on a
+# machine without touching the repo.
+
+key: jack_neel
+name: Jack Neel Podcast
+platform: Content Rewards
+notes: >-
+  Clips must open on Jack asking a question, then the answer. No reposts of
+  moments that are already viral. No logo, watermark or handle in the video.
+  Payout starts at $50 per clip, so quality over quantity.
+
+source:
+  # Only episodes from this channel's latest N uploads (Shorts excluded).
+  channel_url: https://www.youtube.com/@jackneel/videos
+  latest_episodes: 20
+  # Uploaded files are allowed, but marked "source not verified" in the UI.
+  allow_uploads: true
+
+host:
+  name: Jack Neel
+  # Words that may refer to the host in titles.
+  aliases: [Jack, Jack Neel]
+
+detection:
+  prompt: campaign_question_first_v1
+  topics:
+    - money
+    - business
+    - relationships
+    - hot takes
+    - numbers or stats
+    - personal stories
+  min_duration_s: 25
+  max_duration_s: 50
+  top_n: 10
+  # On the app's 0-100 scale. The four 0-10 criteria are combined into it.
+  min_score: 70
+  # The question must be short enough that the answer starts quickly.
+  max_question_s: 10
+  # Never pad the list with low-confidence clips: no fallback pass.
+  fallback_pass: false
+  # Ask for speaker labels so "Jack asks the question" can be verified.
+  # Needs the diarization extra and a HuggingFace token; without them clips are
+  # still checked to open on a question, and the UI warns.
+  diarization: true
+
+freshness:
+  # Never make the same moment of an episode twice (across jobs).
+  history: true
+  # Jack's team clips the viral moments themselves: skip moments matching the
+  # titles of his recent Shorts.
+  shorts_url: https://www.youtube.com/@jackneel/shorts
+  shorts_to_check: 60
+  # The quote in an episode's title is its most-clipped moment.
+  headline_penalty: 20
+  # YouTube "most replayed" peaks, when yt-dlp reports them.
+  most_replayed_penalty: 15
+
+copy:
+  # Extra true facts the hook-title writer may use. The episode's guest
+  # descriptor ("Ex-CIA Spy", "$120M CEO") is added automatically.
+  speaker_facts: "Jack Neel is the host of the Jack Neel Podcast."
+  # Each on its own line, after the hook line and the question line.
+  caption_lines:
+    - "@jackhneel"
+    - "@jackneel"
+    - "#jackneelpod"
+
+render:
+  layout: podcast_hook
+  video_fit: full_width
+  title_font: anton
+  highlight_title_keyword: true
+  caption_keyword_colour: green
+  # No logo, watermark or channel handle is ever burned into the video.
+  watermark: false

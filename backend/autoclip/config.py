@@ -132,6 +132,20 @@ class ViralHookSettings(BaseModel):
     caption_keyword_colour: Literal["green", "yellow"] = "green"
 
 
+class CampaignSettings(BaseModel):
+    """Podcast Campaign Mode: a campaign preset on top of Viral Hook Mode.
+
+    Off by default. The preset itself lives in ``presets/<preset>.yaml``; when
+    a job is created its rules are snapshotted into ``rules`` so a retry runs
+    under the rules it started with.
+    """
+
+    enabled: bool = False
+    preset: str = "jack_neel"
+    #: The resolved preset, filled in per job. Always empty in config.json.
+    rules: dict[str, Any] | None = None
+
+
 class HookTitleSettings(BaseModel):
     #: Burn a clip's hook title (when it has one) over the whole clip.
     enabled: bool = True
@@ -172,6 +186,7 @@ class Settings(BaseModel):
     ingest: IngestSettings = Field(default_factory=IngestSettings)
     export: ExportSettings = Field(default_factory=ExportSettings)
     viral_hook: ViralHookSettings = Field(default_factory=ViralHookSettings)
+    campaign: CampaignSettings = Field(default_factory=CampaignSettings)
     hook_title: HookTitleSettings = Field(default_factory=HookTitleSettings)
     cleanup: CleanupSettings = Field(default_factory=CleanupSettings)
 

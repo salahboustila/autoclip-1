@@ -75,6 +75,9 @@ class JobSettingsIn(BaseModel):
     ratio: Literal["9:16", "1:1", "16:9"] | None = None
     #: Turn Viral Hook Mode (Podcast) on or off for this job only.
     viral_hook: bool | None = None
+    #: Podcast Campaign Mode for this job: a preset key ("jack_neel"), or ""
+    #: to turn it off. Implies Viral Hook Mode.
+    campaign_preset: str | None = None
 
 
 class JobCreateIn(BaseModel):
@@ -254,6 +257,7 @@ class SettingsOut(BaseModel):
     ingest: dict[str, Any]
     export: dict[str, Any]
     viral_hook: dict[str, Any] = Field(default_factory=dict)
+    campaign: dict[str, Any] = Field(default_factory=dict)
     hook_title: dict[str, Any] = Field(default_factory=dict)
     cleanup: dict[str, Any] = Field(default_factory=dict)
     insecure_secret_storage: bool
@@ -270,6 +274,7 @@ class SettingsIn(BaseModel):
     ingest: dict[str, Any] | None = None
     export: dict[str, Any] | None = None
     viral_hook: dict[str, Any] | None = None
+    campaign: dict[str, Any] | None = None
     hook_title: dict[str, Any] | None = None
     cleanup: dict[str, Any] | None = None
 

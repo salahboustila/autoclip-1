@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .. import cleanup, paths
+from .. import campaigns, cleanup, paths
 from ..config import Settings
 from ..config import load as load_settings
 from ..db import store
@@ -152,7 +152,8 @@ class PipelineRunner:
     ) -> None:
         self.job = job
         self.source = source
-        self.settings = settings or settings_for_job(job)
+        # A no-op unless a campaign is on and not yet resolved (CLI runs).
+        self.settings = campaigns.apply(settings or settings_for_job(job))
         self.on_progress = on_progress
         self._is_cancelled = is_cancelled or (lambda: False)
         self.workspace = JobWorkspace(job.id)

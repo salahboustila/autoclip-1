@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
 from starlette.background import BackgroundTask
 
-from .. import cleanup
+from .. import campaigns, cleanup
 from ..config import load as load_settings
 from ..db import store
 from ..db.models import Job, new_id
@@ -47,6 +47,14 @@ def _apply_overrides(settings, overrides: JobSettingsIn):
         merged.export.ratio = overrides.ratio
     if overrides.viral_hook is not None:
         merged.viral_hook.enabled = overrides.viral_hook
+    if overrides.campaign_preset is not None:
+        merged.campaign.enabled = bool(overrides.campaign_preset)
+        if overrides.campaign_preset:
+            merged.campaign.preset = overrides.campaign_preset
+    merged.campaign.rules = None
+    # The campaign preset goes on before the count/length overrides below, so
+    # an explicit per-job value still wins over the preset's.
+    merged = campaigns.apply(merged)
     if merged.viral_hook.enabled:
         # Viral Hook Mode has its own count and length; the job's overrides
         # apply to whichever mode is active.
@@ -66,7 +74,10 @@ async def create_job(payload: JobCreateIn) -> JobOut:
     if source is None:
         raise HTTPException(status_code=404, detail="Source not found.")
 
-    settings = _apply_overrides(load_settings(), payload.settings)
+    try:
+        settings = _apply_overrides(load_settings(), payload.settings)
+    except campaigns.PresetError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     lengths = settings.viral_hook if settings.viral_hook.enabled else settings.clips
     if lengths.min_duration_s >= lengths.max_duration_s:
         raise HTTPException(
