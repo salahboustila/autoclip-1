@@ -122,6 +122,13 @@ class TestAssess:
         _, _, block = fresh.assess(t, boundary(t))
         assert block and "Short" in block
 
+    def test_generic_words_alone_never_match(self) -> None:
+        # Seen on the acceptance run: a real @jackneel Short title that only
+        # shares "make" and "millions" with an unrelated money clip.
+        t = transcript()
+        fresh = freshness.Freshness(shorts=["How to Make Millions With AI Videos"])
+        assert fresh.assess(t, boundary(t))[2] is None
+
     def test_a_loosely_related_short_is_not_a_match(self) -> None:
         t = transcript()
         fresh = freshness.Freshness(shorts=["Why Taxes Are Theft According To Economists"])

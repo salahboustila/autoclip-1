@@ -291,6 +291,22 @@ class QuestionFirstPolicy:
         }
         return score
 
+    def below_cutoff(
+        self, transcript: Transcript, boundary: Boundary, score: int, cutoff: int
+    ) -> None:
+        """Record a candidate that passed the rules but scored under the cut-off."""
+        detail = self._scores.get(boundary.start_word, {})
+        notes = "; ".join(detail.get("freshness_notes", []))
+        self._reject(
+            transcript,
+            boundary.start_word,
+            boundary.end_word,
+            f"score {score} is below {cutoff}"
+            + (f" (base {detail['base_score']}, {notes})" if notes else ""),
+        )
+        if self.rejections:
+            self.rejections[-1]["criteria"] = detail.get("criteria")
+
     # -- annotate ----------------------------------------------------------
 
     def annotate(self, clip: Clip, candidate: ClipCandidate, transcript: Transcript) -> None:

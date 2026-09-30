@@ -295,6 +295,15 @@ class TestDetect:
         assert trace["rejections"][0]["reason"] == "does not open on a question"
         assert trace["host_check"] == "no_speaker_labels"
 
+    async def test_a_lone_low_score_explains_itself(self) -> None:
+        t = episode()
+        question = index_of(t, "How")
+        weak = candidate(question, question + 110, question_hook=5, controversy=5, clarity=5)
+        cfg = question_first_config()
+
+        with pytest.raises(highlights.HighlightError, match="is below 70"):
+            await highlights.detect(t, FakeProvider({"clips": [weak]}), cfg, job_id="j")
+
     async def test_nothing_passing_fails_clearly_without_a_fallback_pass(self) -> None:
         t = episode()
         provider = FakeProvider({"clips": [candidate(0, 110)]})
@@ -350,3 +359,4 @@ class TestRunnerReport:
         assert entry["question_text"] == "How much money did you make last year?"
         assert set(entry) >= {"start", "end", "score", "topic", "question_text", "reason"}
         assert entry["criteria"]["question_hook"] == 9
+        assert data["rejected"] == []

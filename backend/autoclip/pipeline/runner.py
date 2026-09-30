@@ -386,6 +386,7 @@ class PipelineRunner:
                 source_check=self.settings.campaign.source_check,
                 details=config.clip_policy.details,
                 warnings=config.clip_policy.freshness.warnings,
+                rejected=config.clip_policy.rejections,
             )
         self._finish_stage(stage)
         return clips

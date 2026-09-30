@@ -22,7 +22,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from ..pipeline.hookcopy import content_words, vocabulary
+from ..pipeline.hookcopy import content_words, extract_numbers, vocabulary
 from ..pipeline.transcript import Transcript
 from . import history, youtube
 
@@ -47,6 +47,17 @@ PEAK_OVERLAP = 0.3
 
 _QUOTE = re.compile(r"[\"“”]([^\"“”]{6,})[\"“”]")
 
+#: Too common in podcast talk to identify a moment on their own. "How to Make
+#: Millions With AI Videos" must not match every clip that mentions money.
+GENERIC_WORDS = {
+    "make", "made", "making", "money", "million", "millions", "billion", "people",
+    "life", "time", "year", "years", "thing", "things", "work", "working", "want",
+    "really", "never", "always", "every", "good", "best", "first", "world", "going",
+    "think", "right", "today", "said", "says", "just", "like", "much", "many", "more",
+}  # fmt: skip
+#: Distinctive words a Short title and a clip must share to be the same moment.
+SHORT_MIN_SHARED = 3
+
 
 def headline_quote(title: str) -> str:
     """The quoted line in an episode title ('Guest: "Quote!" Rest | Show')."""
@@ -54,13 +65,28 @@ def headline_quote(title: str) -> str:
     return match.group(1).strip() if match else ""
 
 
-def _match_ratio(phrase: str, clip_vocabulary: set[str]) -> tuple[float, int]:
+def _match(
+    phrase: str,
+    clip_vocabulary: set[str],
+    clip_numbers: set[float] | None = None,
+    *,
+    generic: bool = True,
+) -> tuple[float, int]:
+    """``(share of the phrase's words in the clip, number shared)``.
+
+    With ``clip_numbers``, a specific number shared with the clip ("four
+    million", "$4M") counts as a distinctive word: it is strong evidence of
+    the same moment.
+    """
     from ..pipeline.hookcopy import stem
 
-    words = {stem(w) for w in content_words(phrase)}
-    if not words:
+    words = {stem(w) for w in content_words(phrase) if generic or w.lower() not in GENERIC_WORDS}
+    numbers = extract_numbers(phrase) if clip_numbers is not None else set()
+    total = len(words) + len(numbers)
+    if not total:
         return 0.0, 0
-    return len(words & clip_vocabulary) / len(words), len(words)
+    shared = len(words & clip_vocabulary) + len(numbers & (clip_numbers or set()))
+    return shared / total, shared
 
 
 def _peaks(heatmap: list[dict[str, float]]) -> list[tuple[float, float]]:
@@ -103,17 +129,17 @@ class Freshness:
             if _overlap(span, earlier) / shorter >= SAME_MOMENT_OVERLAP:
                 return 0, [], f"already clipped in job {entry['job_id'][:8]}"
 
-        clip_vocabulary = vocabulary(
-            transcript.text_between(boundary.start_word, boundary.end_word)
-        )
+        clip_text = transcript.text_between(boundary.start_word, boundary.end_word)
+        clip_vocabulary = vocabulary(clip_text)
+        clip_numbers = extract_numbers(clip_text)
         for title in self.shorts:
-            ratio, size = _match_ratio(title, clip_vocabulary)
-            if size >= 3 and ratio >= SHORT_MATCH:
+            ratio, shared = _match(title, clip_vocabulary, clip_numbers, generic=False)
+            if shared >= SHORT_MIN_SHARED and ratio >= SHORT_MATCH:
                 return 0, [], f"matches the host's Short “{title}”"
 
         penalty, notes = 0, []
-        ratio, size = _match_ratio(self.headline, clip_vocabulary)
-        if size >= 2 and ratio >= HEADLINE_MATCH:
+        ratio, shared = _match(self.headline, clip_vocabulary)
+        if shared >= 2 and ratio >= HEADLINE_MATCH:
             penalty += self.headline_penalty
             notes.append(f"contains the episode's headline quote (−{self.headline_penalty})")
 

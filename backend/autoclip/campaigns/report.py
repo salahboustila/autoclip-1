@@ -46,6 +46,7 @@ def write(
     details: dict[str, dict[str, Any]] | None = None,
     files: dict[str, str] | None = None,
     warnings: list[str] | None = None,
+    rejected: list[dict[str, Any]] | None = None,
 ) -> Path:
     """Write (or refresh) the report. Anything not passed is kept from the last write."""
     previous = read(job_id) or {}
@@ -106,6 +107,8 @@ def write(
             "watermark": False,
         },
         "clips": entries,
+        # Candidates the model proposed that broke a campaign rule, and why.
+        "rejected": rejected if rejected is not None else previous.get("rejected", []),
     }
     path = report_path(job_id)
     path.parent.mkdir(parents=True, exist_ok=True)

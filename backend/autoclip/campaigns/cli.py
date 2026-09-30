@@ -152,8 +152,14 @@ def run_cmd(
     )
     console.print(f"Job {job.id} — {source.title}")
 
+    last: dict[str, object] = {"message": None, "pct": -10.0}
+
     def on_progress(event: runner.ProgressEvent) -> None:
-        console.print(f"  {event.overall * 100:5.1f}%  {event.message}", highlight=False)
+        # One line per new step, or every 10% within a long one.
+        pct = event.overall * 100
+        if event.message != last["message"] or pct - float(last["pct"]) >= 10:
+            console.print(f"  {pct:5.1f}%  {event.message}", highlight=False)
+            last.update(message=event.message, pct=pct)
 
     try:
         asyncio.run(

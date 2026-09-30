@@ -361,7 +361,7 @@ def build_clips(
                 continue
             score = policy_score
             if viral_cutoff is not None and score < viral_cutoff:
-                log.info("Dropped a campaign candidate scoring %d (< %d).", score, viral_cutoff)
+                policy.below_cutoff(transcript, boundary, score, viral_cutoff)
                 continue
         elif config.viral_hook:
             clip_text = transcript.text_between(boundary.start_word, boundary.end_word)
