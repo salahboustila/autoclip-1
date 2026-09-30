@@ -40,6 +40,51 @@ export interface Job {
   source: Source | null
   /** Created with Viral Hook Mode (Podcast) on. */
   viral_hook: boolean
+  campaign: JobCampaign | null
+}
+
+export interface CampaignPresetInfo {
+  key: string
+  name: string
+  platform: string
+}
+
+export interface CampaignPresetDetail extends CampaignPresetInfo {
+  notes: string
+  channel_url: string
+  latest_episodes: number
+  allow_uploads: boolean
+  host: string
+  caption_lines: string[]
+  min_duration_s: number
+  max_duration_s: number
+  top_n: number
+  min_score: number
+}
+
+export interface CampaignEpisode {
+  id: string
+  title: string
+  duration_s: number | null
+  url: string
+}
+
+export interface SourceCheck {
+  status: 'verified' | 'not_verified' | 'rejected'
+  message: string
+  episode: CampaignEpisode | null
+}
+
+/** Podcast Campaign Mode state for one job. */
+export interface JobCampaign {
+  preset: string
+  name: string
+  caption_lines: string[]
+  source_check: SourceCheck | null
+  /** null until highlight detection has run. */
+  host_check: 'verified' | 'no_speaker_labels' | 'host_not_identified' | null
+  warnings: string[]
+  report_url: string | null
 }
 
 export interface ExportRecord {
@@ -79,6 +124,8 @@ export interface Clip {
   hook_title_alts: string[]
   /** Social post caption: question line, then handle and hashtags. */
   post_caption: string
+  /** Podcast Campaign Mode: the host's question the clip opens on. */
+  question_text: string
   caption_style: string
   ratio: string
   exports: ExportRecord[]
@@ -177,6 +224,7 @@ export interface Settings {
     highlight_title_keyword: boolean
     caption_keyword_colour: 'green' | 'yellow'
   }
+  campaign: { enabled: boolean; preset: string }
   hook_title: { enabled: boolean; position_pct: number; font_size: number }
   cleanup: { auto_delete_sources: boolean }
   insecure_secret_storage: boolean
@@ -208,6 +256,8 @@ export interface JobSettingsOverrides {
   ratio?: string
   /** Viral Hook Mode (Podcast) for this job only. */
   viral_hook?: boolean
+  /** Podcast Campaign Mode preset for this job; "" turns a saved default off. */
+  campaign_preset?: string
 }
 
 /** An API error carrying the server's message and its actionable hint. */
@@ -321,6 +371,16 @@ export const api = {
     request<ExportRecord>(`/api/clips/${clipId}/export`, {
       method: 'POST',
       body: JSON.stringify({ ratio, style, write_srt: writeSrt }),
+    }),
+
+  listCampaigns: () => request<CampaignPresetInfo[]>('/api/campaigns'),
+  getCampaign: (key: string) => request<CampaignPresetDetail>(`/api/campaigns/${key}`),
+  campaignEpisodes: (key: string) =>
+    request<CampaignEpisode[]>(`/api/campaigns/${key}/episodes`),
+  checkCampaignUrl: (key: string, url: string) =>
+    request<SourceCheck>(`/api/campaigns/${key}/check-url`, {
+      method: 'POST',
+      body: JSON.stringify({ url }),
     }),
 
   captionStyles: () => request<CaptionStyle[]>('/api/caption-styles'),

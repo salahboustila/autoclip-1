@@ -9,6 +9,7 @@ import {
   type Clip,
   type CropPath,
   type Job,
+  type JobCampaign,
   type Word,
 } from '../api'
 import { CaptionEditor } from '../components/CaptionEditor'
@@ -218,6 +219,8 @@ export function Review() {
         </div>
       </div>
 
+      {job.campaign && <CampaignBanner campaign={job.campaign} />}
+
       {error && (
         <div className="mt-6 max-w-3xl">
           <ErrorNote error={error} onDismiss={() => setError(null)} />
@@ -401,6 +404,61 @@ export function Review() {
           </section>
         </div>
       )}
+    </div>
+  )
+}
+
+const SOURCE_BADGE: Record<string, { label: string; tone: string }> = {
+  verified: { label: 'Source verified', tone: 'border-signal-good text-signal-good' },
+  not_verified: { label: 'Source not verified', tone: 'border-sodium-500 text-sodium-500' },
+}
+
+/** Podcast Campaign Mode: the rules this job ran under, and what couldn't be checked. */
+function CampaignBanner({ campaign }: { campaign: JobCampaign }) {
+  const badge = campaign.source_check ? SOURCE_BADGE[campaign.source_check.status] : null
+  const hostWarning =
+    campaign.host_check === 'no_speaker_labels'
+      ? 'No speaker labels for this episode: every clip opens on a question, but whether the host asked it could not be verified. Install the diarization extra and set a HuggingFace token to check it.'
+      : campaign.host_check === 'host_not_identified'
+        ? 'Speaker labels were found, but the host could not be identified, so who asked each question was not checked.'
+        : null
+
+  return (
+    <div className="mt-6 max-w-4xl border border-ink-800 px-4 py-3">
+      <div className="flex flex-wrap items-baseline gap-3">
+        <span className="eyebrow">Campaign</span>
+        <span className="text-sm text-ink-100">{campaign.name}</span>
+        {badge && (
+          <span
+            className={`border px-2 py-0.5 text-xs ${badge.tone}`}
+            title={campaign.source_check?.message}
+          >
+            {badge.label}
+          </span>
+        )}
+        {campaign.host_check === 'verified' && (
+          <span className="border border-signal-good px-2 py-0.5 text-xs text-signal-good">
+            Host questions verified
+          </span>
+        )}
+        {campaign.report_url && (
+          <a
+            href={campaign.report_url}
+            className="ml-auto text-xs text-ink-400 underline-offset-2 hover:text-ink-200 hover:underline"
+          >
+            selected_clips.json
+          </a>
+        )}
+      </div>
+      {campaign.source_check && campaign.source_check.status !== 'verified' && (
+        <p className="mt-2 text-xs text-sodium-500">{campaign.source_check.message}</p>
+      )}
+      {hostWarning && <p className="mt-2 text-xs text-sodium-500">{hostWarning}</p>}
+      {campaign.warnings.map((warning) => (
+        <p key={warning} className="mt-1 text-xs text-ink-500">
+          {warning}
+        </p>
+      ))}
     </div>
   )
 }

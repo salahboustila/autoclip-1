@@ -5,10 +5,12 @@ import {
   ApiError,
   api,
   formatDuration,
+  type CampaignPresetInfo,
   type Job,
   type JobSettingsOverrides,
   type ProviderStatus,
 } from '../api'
+import { CampaignPanel } from '../components/CampaignPanel'
 import { ErrorNote } from '../components/ErrorNote'
 
 export function Ingest() {
@@ -18,6 +20,8 @@ export function Ingest() {
   const [error, setError] = useState<ApiError | Error | null>(null)
   const [jobs, setJobs] = useState<Job[]>([])
   const [providers, setProviders] = useState<ProviderStatus[]>([])
+  const [campaignPresets, setCampaignPresets] = useState<CampaignPresetInfo[]>([])
+  const [notice, setNotice] = useState<string | null>(null)
   const [overrides, setOverrides] = useState<JobSettingsOverrides>({})
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -26,7 +30,10 @@ export function Ingest() {
   useEffect(() => {
     api.listJobs(8).then(setJobs).catch(() => undefined)
     api.providerStatus().then(setProviders).catch(() => undefined)
+    api.listCampaigns().then(setCampaignPresets).catch(() => undefined)
   }, [])
+
+  const campaign = overrides.campaign_preset || undefined
 
   const start = useCallback(
     async (kind: 'url' | 'file', run: () => Promise<{ id: string }>) => {
@@ -45,9 +52,27 @@ export function Ingest() {
     [navigate, overrides],
   )
 
-  const submitUrl = (event: React.FormEvent) => {
+  const submitUrl = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!url.trim()) return
+    setNotice(null)
+    if (campaign) {
+      // Check the campaign's source rules before downloading anything.
+      setBusy('url')
+      try {
+        const check = await api.checkCampaignUrl(campaign, url.trim())
+        if (check.status === 'rejected') {
+          setError(new Error(check.message))
+          setBusy(null)
+          return
+        }
+        if (check.status === 'not_verified') setNotice(check.message)
+      } catch (err) {
+        setError(err as Error)
+        setBusy(null)
+        return
+      }
+    }
     void start('url', () => api.ingestYouTube(url.trim()))
   }
 
@@ -71,7 +96,7 @@ export function Ingest() {
       <div className="mt-16 grid gap-x-16 gap-y-12 lg:grid-cols-[1.35fr_1fr]">
         {/* URL */}
         <section className="rise" style={{ animationDelay: '90ms' }}>
-          <form onSubmit={submitUrl}>
+          <form onSubmit={(event) => void submitUrl(event)}>
             <label htmlFor="url" className="eyebrow">
               Paste a link
             </label>
@@ -100,10 +125,21 @@ export function Ingest() {
             Only download video you own or have the rights to process.
           </p>
 
-          <ViralHookToggle
-            on={overrides.viral_hook ?? false}
-            onChange={(on) => setOverrides({ ...overrides, viral_hook: on || undefined })}
+          <CampaignPanel
+            presets={campaignPresets}
+            value={campaign}
+            onChange={(key) => setOverrides({ ...overrides, campaign_preset: key })}
+            onPickEpisode={(picked) => setUrl(picked)}
           />
+
+          {!campaign && (
+            <ViralHookToggle
+              on={overrides.viral_hook ?? false}
+              onChange={(on) => setOverrides({ ...overrides, viral_hook: on || undefined })}
+            />
+          )}
+
+          {notice && <p className="mt-3 text-xs text-sodium-500">{notice}</p>}
 
           <AdvancedOptions
             open={advancedOpen}
@@ -146,6 +182,11 @@ export function Ingest() {
               {busy === 'file' ? 'Uploading…' : 'Drop video or audio'}
             </span>
             <span className="text-xs text-ink-500">mp4 · mov · mkv · webm · mp3 · wav · m4a</span>
+            {campaign && (
+              <span className="mt-1 text-xs text-sodium-500">
+                Campaign mode: an uploaded file is marked “source not verified”.
+              </span>
+            )}
           </div>
           <input
             ref={fileInput}

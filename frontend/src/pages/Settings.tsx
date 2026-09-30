@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 
-import { api, type ProviderStatus, type Settings as SettingsData, type SystemStatus } from '../api'
+import {
+  api,
+  type CampaignPresetInfo,
+  type ProviderStatus,
+  type Settings as SettingsData,
+  type SystemStatus,
+} from '../api'
 import { ErrorNote } from '../components/ErrorNote'
 
 const SECRET_LABELS: Record<string, string> = {
@@ -14,6 +20,7 @@ export function Settings() {
   const [settings, setSettings] = useState<SettingsData | null>(null)
   const [providers, setProviders] = useState<ProviderStatus[]>([])
   const [system, setSystem] = useState<SystemStatus | null>(null)
+  const [campaignPresets, setCampaignPresets] = useState<CampaignPresetInfo[]>([])
   const [error, setError] = useState<Error | null>(null)
   const [saved, setSaved] = useState(false)
 
@@ -21,6 +28,7 @@ export function Settings() {
     void api.getSettings().then(setSettings).catch((e) => setError(e as Error))
     void api.providerStatus().then(setProviders).catch(() => undefined)
     void api.system().then(setSystem).catch(() => undefined)
+    void api.listCampaigns().then(setCampaignPresets).catch(() => undefined)
   }
 
   useEffect(reload, [])
@@ -267,6 +275,37 @@ export function Settings() {
           />
           Also write an .srt sidecar
         </label>
+      </Section>
+
+      <Section title="Podcast Campaign Mode">
+        <label className="flex items-start gap-3 text-sm text-ink-200">
+          <input
+            type="checkbox"
+            checked={settings.campaign.enabled}
+            onChange={(e) =>
+              patch({ campaign: { ...settings.campaign, enabled: e.target.checked } })
+            }
+            className="mt-0.5 size-4 accent-sodium-500"
+          />
+          <span>
+            On by default for new jobs
+            <span className="mt-1 block text-xs text-ink-500">
+              Campaign rules live in presets/&lt;name&gt;.yaml. It can also be switched per job on
+              the New page.
+            </span>
+          </span>
+        </label>
+        {campaignPresets.length > 0 && (
+          <div className="mt-5 max-w-sm">
+            <Select
+              label="Preset"
+              value={settings.campaign.preset}
+              onChange={(value) => patch({ campaign: { ...settings.campaign, preset: value } })}
+              options={campaignPresets.map((preset) => preset.key)}
+              labels={Object.fromEntries(campaignPresets.map((p) => [p.key, p.name]))}
+            />
+          </div>
+        )}
       </Section>
 
       <Section title="Viral Hook Mode (Podcast)">

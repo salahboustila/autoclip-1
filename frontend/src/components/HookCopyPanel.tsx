@@ -48,6 +48,15 @@ export function HookCopyPanel({
         </div>
       )}
 
+      {clip.question_text && (
+        <div>
+          <p className="eyebrow">Opens on the question</p>
+          <p className="mt-2 border-l-2 border-sodium-500 pl-3 text-[0.9375rem] leading-relaxed text-ink-100">
+            {clip.question_text}
+          </p>
+        </div>
+      )}
+
       <HookTitleField
         value={clip.hook_title}
         onSave={(hookTitle) => onPatch({ hook_title: hookTitle })}
