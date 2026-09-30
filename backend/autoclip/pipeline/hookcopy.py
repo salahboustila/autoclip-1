@@ -81,6 +81,7 @@ FRAMING_WORDS = {
     "admits", "breaks", "down", "learn", "know", "need", "want", "watch", "wait",
     "shocking", "surprising", "brutal", "honest", "harsh", "truth", "real", "secret",
     "nobody", "everyone", "anyone", "people", "happens", "happened", "exactly",
+    "reason", "reasons",
 }  # fmt: skip
 
 #: Words that count as the same claim. A title may say "study" if the speaker
@@ -147,10 +148,18 @@ def stem(word: str) -> str:
     return word
 
 
+_SPLIT_THOUSANDS = re.compile(r"(\d)\s+([.,]\d{3}\b)")
+_SPLIT_PERCENT = re.compile(r"(\d)\s+%")
+
+
 def extract_numbers(text: str) -> set[float]:
     """Every number stated in ``text``, digits or words: "50k", "fifty thousand",
     "69%", "sixty-nine percent" and "$50,000" all come out as plain values."""
     values: set[float] = set()
+    # Whisper splits numbers into word tokens, so a transcript reads "$200 ,000"
+    # and "90 %". Rejoin them before parsing.
+    text = _SPLIT_THOUSANDS.sub(r"\1\2", text)
+    text = _SPLIT_PERCENT.sub(r"\1%", text)
     tokens = [_clean(t) for t in _tokens(text)]
     tokens = [p for t in tokens for p in (t.split("-") if not _NUMERIC.match(t) else [t]) if p]
 

@@ -58,6 +58,13 @@ class TestNumbers:
     def test_extracts(self, text: str, value: float) -> None:
         assert value in hookcopy.extract_numbers(text)
 
+    @pytest.mark.parametrize(
+        ("text", "value"), [("I spent $200 ,000 on it", 200_000), ("about 90 % fail", 90)]
+    )
+    def test_whisper_split_tokens_are_rejoined(self, text: str, value: float) -> None:
+        # Real Whisper output from the campaign acceptance run.
+        assert value in hookcopy.extract_numbers(text)
+
     def test_plain_text_has_none(self) -> None:
         assert hookcopy.extract_numbers("Women want a man who leads.") == set()
 

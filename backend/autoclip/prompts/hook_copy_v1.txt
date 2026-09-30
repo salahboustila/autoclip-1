@@ -10,6 +10,7 @@ Never claim anything the speaker does not say in this clip.
 - Do not mention a study, poll, survey, or vote unless the speaker mentions one.
 - Do not describe the speaker ("Millionaire", "Doctor", "Expert", "Therapist") unless the transcript or the SPEAKER FACTS below state it.
 - Do not add a conclusion, a verdict, or an opinion the speaker does not give.
+- Refer to the speaker as "he" or "she" only when the transcript or the speaker facts make it clear. Otherwise use their descriptor ("This CEO", "The Guest") or "They".
 - Reuse the speaker's own key words wherever you can. A title built from words in the transcript is always safe.
 
 If a pattern below does not fit this clip truthfully, do not use it.
