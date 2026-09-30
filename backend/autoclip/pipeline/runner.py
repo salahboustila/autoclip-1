@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import campaigns, cleanup, paths
-from ..campaigns import question_first
+from ..campaigns import freshness, history, question_first
 from ..campaigns import report as campaign_report
 from ..config import Settings
 from ..config import load as load_settings
@@ -339,7 +339,8 @@ class PipelineRunner:
         config = detection_config(self.settings)
         campaign = campaigns.rules_of(self.settings)
         if campaign is not None:
-            config = question_first.configure(config, campaign)
+            fresh = freshness.load(campaign, self.source, self.job.id, self.settings.ingest)
+            config = question_first.configure(config, campaign, freshness=fresh)
 
         self._emit(stage, 0.0, f"Finding highlights with {provider.name}")
         clips = await highlights.detect(
@@ -378,6 +379,7 @@ class PipelineRunner:
                 host_check=config.clip_policy.host_check(transcript),
                 source_check=self.settings.campaign.source_check,
                 details=config.clip_policy.details,
+                warnings=config.clip_policy.freshness.warnings,
             )
         self._finish_stage(stage)
         return clips
@@ -455,6 +457,7 @@ class PipelineRunner:
         destination_dir = paths.exports_dir() / self.job.id
         destination_dir.mkdir(parents=True, exist_ok=True)
         exported: dict[str, str] = {}
+        campaign = campaigns.rules_of(self.settings)
 
         for index, clip in enumerate(clips):
             self._check_cancelled()
@@ -514,8 +517,9 @@ class PipelineRunner:
             store.update_clip(clip.id, status="exported")
             hookcopy.write_caption_file(destination_dir, clip.rank, clip.post_caption)
             exported[clip.id] = destination.name
+            if campaign is not None and campaign.freshness.history:
+                history.record(campaign.key, self.source, clip)
 
-        campaign = campaigns.rules_of(self.settings)
         if campaign is not None:
             campaign_report.write(self.job.id, campaign, clips, files=exported)
         self._finish_stage(stage)

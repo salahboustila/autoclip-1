@@ -30,6 +30,17 @@ def autoclip_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
     db.reset_connections()
 
 
+@pytest.fixture(autouse=True)
+def no_campaign_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Campaign YouTube lookups never reach the network in tests."""
+    from autoclip.campaigns import youtube
+
+    def offline(url: str, **_kwargs):
+        raise youtube.LookupError_(f"network disabled in tests ({url})")
+
+    monkeypatch.setattr(youtube, "_extract", offline)
+
+
 @pytest.fixture
 def initialised_db(autoclip_home: Path) -> int:
     """An AutoClip home with the schema migrated up to date."""

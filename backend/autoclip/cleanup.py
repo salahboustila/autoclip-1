@@ -82,7 +82,10 @@ def delete_job(job: Job) -> None:
 
     The source goes too unless another job still uses it.
     """
+    from .campaigns import history
+
     source = store.get_source(job.source_id)
+    history.forget_job(job.id)
     _remove_tree(paths.exports_dir() / job.id)
     remove_work_files(job.id)
     store.delete_job(job.id)

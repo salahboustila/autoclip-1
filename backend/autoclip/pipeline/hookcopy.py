@@ -236,6 +236,16 @@ def _supported(word: str, vocabulary: set[str]) -> bool:
     )
 
 
+def content_words(text: str) -> list[str]:
+    """Words in ``text`` that carry meaning: no framing words, numbers, or short words."""
+    return _content_words(text)
+
+
+def vocabulary(text: str) -> set[str]:
+    """Every stemmed word form in ``text``."""
+    return _vocabulary(text)
+
+
 @dataclass
 class GroundingResult:
     ok: bool

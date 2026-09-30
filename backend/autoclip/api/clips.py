@@ -9,7 +9,9 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from .. import paths
+from .. import campaigns, paths
+from ..campaigns import history
+from ..campaigns import report as campaign_report
 from ..config import load as load_settings
 from ..db import store
 from ..db.models import Export, new_id
@@ -222,7 +224,8 @@ async def export_clip(clip_id: str, payload: ExportRequestIn) -> ExportOut:
     workspace = JobWorkspace(clip.job_id)
     # The layout belongs to the job (Viral Hook Mode is chosen per job), not
     # to whatever the saved settings say today.
-    podcast = layouts.podcast_options(settings_for_job(job), source.width, source.height)
+    job_settings = settings_for_job(job)
+    podcast = layouts.podcast_options(job_settings, source.width, source.height)
     ratio = "9:16" if podcast is not None else payload.ratio
     if podcast is not None:
         cached = workspace.crop_path(clip.id)
@@ -281,6 +284,18 @@ async def export_clip(clip_id: str, payload: ExportRequestIn) -> ExportOut:
     await asyncio.to_thread(store.create_export, record)
     await asyncio.to_thread(store.update_clip, clip_id, status="exported")
     await asyncio.to_thread(_write_caption, clip)
+    campaign = campaigns.rules_of(job_settings)
+    if campaign is not None:
+        if campaign.freshness.history:
+            await asyncio.to_thread(history.record, campaign.key, source, clip)
+        clips_now = await asyncio.to_thread(store.list_clips, clip.job_id)
+        await asyncio.to_thread(
+            campaign_report.write,
+            clip.job_id,
+            campaign,
+            clips_now,
+            files={clip.id: destination.name},
+        )
 
     return ExportOut.of(record)
 

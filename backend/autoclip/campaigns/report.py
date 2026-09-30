@@ -45,6 +45,7 @@ def write(
     source_check: dict[str, Any] | None = None,
     details: dict[str, dict[str, Any]] | None = None,
     files: dict[str, str] | None = None,
+    warnings: list[str] | None = None,
 ) -> Path:
     """Write (or refresh) the report. Anything not passed is kept from the last write."""
     previous = read(job_id) or {}
@@ -97,6 +98,7 @@ def write(
         ),
         "source_check": source_check if source_check is not None else previous.get("source_check"),
         "host_check": host_check if host_check is not None else previous.get("host_check"),
+        "warnings": warnings if warnings is not None else previous.get("warnings", []),
         "rules": {
             "opens_on_host_question": True,
             "length_s": [preset.detection.min_duration_s, preset.detection.max_duration_s],
