@@ -11,6 +11,7 @@ from sse_starlette.sse import EventSourceResponse
 from starlette.background import BackgroundTask
 
 from .. import campaigns, cleanup
+from ..campaigns import source as campaign_source
 from ..config import load as load_settings
 from ..db import store
 from ..db.models import Job, new_id
@@ -84,6 +85,15 @@ async def create_job(payload: JobCreateIn) -> JobOut:
         raise HTTPException(
             status_code=400, detail="Minimum clip length must be below the maximum."
         )
+
+    preset = campaigns.rules_of(settings)
+    if preset is not None:
+        check = await asyncio.to_thread(
+            campaign_source.check_source, preset, source, settings.ingest
+        )
+        if not check.allowed:
+            raise HTTPException(status_code=400, detail=check.message)
+        settings.campaign.source_check = check.as_dict()
 
     job = Job(
         id=new_id(),
@@ -216,3 +226,14 @@ async def download_all(job_id: str) -> FileResponse:
         filename=f"autoclip-{job_id[:8]}-clips.zip",
         background=BackgroundTask(archive.unlink, missing_ok=True),
     )
+
+
+@router.get("/{job_id}/campaign-report")
+async def campaign_report(job_id: str) -> FileResponse:
+    """The campaign's ``selected_clips.json`` for a job."""
+    from ..campaigns import report
+
+    path = report.report_path(job_id)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="This job has no campaign report.")
+    return FileResponse(path, media_type="application/json", filename="selected_clips.json")

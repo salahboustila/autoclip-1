@@ -120,6 +120,8 @@ def collect_job_files(job_id: str) -> list[Path]:
     export_dir = paths.exports_dir() / job_id
     for caption in sorted(export_dir.glob("*_caption.txt")):
         add(caption)
+    # Podcast Campaign Mode's record of what was picked and why.
+    add(export_dir / "selected_clips.json")
     return files
 
 

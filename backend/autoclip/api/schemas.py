@@ -100,6 +100,8 @@ class JobOut(BaseModel):
     source: SourceOut | None = None
     #: The job was created with Viral Hook Mode (Podcast) on.
     viral_hook: bool = False
+    #: Podcast Campaign Mode: preset, source check, host check, warnings.
+    campaign: dict[str, Any] | None = None
 
     @classmethod
     def of(cls, job: models.Job, source: models.Source | None = None) -> JobOut:
@@ -117,7 +119,29 @@ class JobOut(BaseModel):
             finished_at=job.finished_at,
             source=SourceOut.of(source) if source else None,
             viral_hook=bool((job.settings.get("viral_hook") or {}).get("enabled")),
+            campaign=_campaign_of(job),
         )
+
+
+def _campaign_of(job: models.Job) -> dict[str, Any] | None:
+    campaign = job.settings.get("campaign") or {}
+    rules = campaign.get("rules")
+    if not campaign.get("enabled") or not rules:
+        return None
+    from ..campaigns import report
+
+    selected = report.read(job.id) or {}
+    return {
+        "preset": rules.get("key"),
+        "name": rules.get("name"),
+        "caption_lines": (rules.get("copy") or {}).get("caption_lines", []),
+        "source_check": campaign.get("source_check"),
+        # "verified", "no_speaker_labels" or "host_not_identified"; None until
+        # highlight detection has run.
+        "host_check": selected.get("host_check"),
+        "warnings": selected.get("warnings", []),
+        "report_url": f"/api/jobs/{job.id}/campaign-report" if selected else None,
+    }
 
 
 class WordOut(BaseModel):

@@ -701,5 +701,10 @@ def _format_duration(seconds: float) -> str:
     return f"{minutes}:{secs:02d}"
 
 
+from .campaigns.cli import campaign_app  # noqa: E402
+
+app.add_typer(campaign_app, name="campaign")
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()
