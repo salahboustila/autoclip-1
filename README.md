@@ -194,6 +194,45 @@ off nothing below changes.
 Settings live under `viral_hook` in `config.json`. Rejected titles and the
 reasons are traced to `work/<job>/highlights/copy_XX.json`.
 
+### Podcast Campaign Mode
+
+Clips for a paid clipping campaign, built on Viral Hook Mode. Each campaign is
+a YAML preset in `backend/autoclip/presets/` (a file with the same name in
+`~/.autoclip/presets/` overrides it); the first is `jack_neel.yaml`. Switch it
+on per job on the New page, or by default under Settings. Off by default.
+
+- **Source.** A YouTube link must be one of the channel's latest N episodes
+  (checked before downloading); an uploaded file is allowed but marked
+  "source not verified".
+- **Question-first.** Every clip opens exactly on the host's question, then the
+  answer. The prompt asks for it and code enforces it: the lead-in is trimmed,
+  long questions and short answers are rejected, and with speaker labels the
+  host must ask and someone else answer. Without speaker labels the UI says
+  that the host could not be verified.
+- **Scoring.** Question hook, controversy, number or stat, and clarity (0-10
+  each) combine into the 0-100 score; no low-confidence padding.
+- **Freshness.** Never the same moment twice (a per-campaign history), never a
+  moment matching the host's own recent Shorts, and a penalty for the
+  episode's headline quote and YouTube's most-replayed peaks.
+- **Copy and render.** Three grounded hook titles, a caption with the
+  campaign's tags on their own lines (`clip_XX_caption.txt`), and the Podcast
+  Hook layout with no watermark or handle.
+- **Report.** `selected_clips.json` next to the clips records every pick, its
+  criteria, and every rejected candidate with the reason.
+
+From the command line:
+
+```bash
+autoclip campaign list                  # presets
+autoclip campaign episodes jack_neel    # the episodes the campaign accepts
+autoclip campaign run jack_neel         # newest episode → clips + selected_clips.json on stdout
+autoclip campaign run jack_neel --episode 3
+autoclip campaign run jack_neel /path/to/episode.mp4   # a file you downloaded yourself
+```
+
+Speaker labels need the diarization extra and a HuggingFace token:
+`pip install -e '.[diarization]'` then `autoclip config set-secret huggingface_token`.
+
 ### Cleanup
 
 `cleanup.auto_delete_sources` (on by default) deletes a job's source video

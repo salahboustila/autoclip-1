@@ -165,7 +165,7 @@ function CaptionField({
       <textarea
         id="post-caption"
         value={draft}
-        rows={4}
+        rows={Math.max(4, draft.split('\n').length + 1)}
         maxLength={2200}
         placeholder="No caption yet"
         onChange={(e) => setDraft(e.target.value)}
