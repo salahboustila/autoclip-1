@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import campaigns, cleanup, paths
+from ..campaigns import copy as campaign_copy
 from ..campaigns import freshness, history, question_first
 from ..campaigns import report as campaign_report
 from ..config import Settings
@@ -362,11 +363,16 @@ class PipelineRunner:
                 clips,
                 transcript,
                 provider,
-                facts=viral_settings.speaker_facts,
+                facts=(
+                    campaign_copy.campaign_facts(campaign, self.source)
+                    if campaign is not None
+                    else viral_settings.speaker_facts
+                ),
                 handle=viral_settings.caption_handle,
                 fixed_hashtags=viral_settings.fixed_hashtags,
                 trace_dir=self.workspace.highlight_traces,
                 on_progress=lambda f: self._emit(stage, 0.8 + 0.2 * f),
+                caption_lines=campaign.copy_.caption_lines if campaign is not None else None,
             )
 
         store.replace_clips(self.job.id, clips)

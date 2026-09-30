@@ -338,6 +338,9 @@ def validate_option(
     title = normalise_title(raw, topic=topic)
     if not EMOJI_RE.sub("", title).strip():
         return None, "empty"
+    if re.search(r"(^|\s)[@#]\w", title):
+        # Handles and hashtags belong in the post caption, never burned in.
+        return None, "contains a handle or hashtag"
     if word_count(title) > MAX_TITLE_WORDS:
         return None, f"more than {MAX_TITLE_WORDS} words"
     grounding = check_grounding(title, clip_text, facts)
@@ -460,6 +463,52 @@ def build_caption(
     return f"{line}\n\n{footer}"
 
 
+_SENTENCE = re.compile(r"[^.!?]+[.!?]+|[^.!?]+$")
+
+
+def build_lines_caption(
+    text: str,
+    *,
+    title: str,
+    clip_text: str,
+    lines: list[str],
+    hook_fallback: str = "",
+    facts: str = "",
+) -> str:
+    """A hook line, a question line, then each of ``lines`` on its own line.
+
+    The model's caption is split into its statement and its closing question.
+    A missing or ungrounded part is rebuilt: the hook line from
+    ``hook_fallback`` (words from the clip) or the title, the question as
+    "Do you agree?". Nothing may state a number the speaker doesn't say.
+    """
+    text = " ".join(str(text).split())
+    text = re.sub(r"(?:\s*[#@]\w+)+", "", text).strip()
+    allowed = extract_numbers(f"{clip_text} {facts}")
+    sentences = [s.strip() for s in _SENTENCE.findall(text) if s.strip()]
+
+    question = ""
+    if sentences and sentences[-1].endswith("?"):
+        question = sentences.pop()
+    hook = " ".join(sentences)
+
+    if not hook or not extract_numbers(hook) <= allowed:
+        bare = EMOJI_RE.sub("", title).strip()
+        if bare.endswith("?") and hook_fallback:
+            # A question title can't restate the hook; quote the answer instead.
+            hook = hook_fallback.strip().rstrip(" ,;:")
+            hook = f"“{hook}{'' if hook[-1] in '.!?…' else '.'}”"
+        else:
+            hook = bare.rstrip(" ,;:")
+            if hook and hook[-1] not in ".!?…":
+                hook += "."
+    if not question or not extract_numbers(question) <= allowed:
+        question = "Do you agree?"
+
+    footer = "\n".join(line.strip() for line in lines if line.strip())
+    return f"{hook}\n{question}" + (f"\n\n{footer}" if footer else "")
+
+
 def caption_filename(rank: int) -> str:
     return f"clip_{rank:02d}_caption.txt"
 
@@ -504,6 +553,8 @@ async def generate(
     handle: str = "@michaelsartain",
     fixed_hashtags: list[str] | None = None,
     config: DetectionConfig | None = None,
+    caption_lines: list[str] | None = None,
+    hook_fallback: str = "",
 ) -> HookCopy:
     """Ask the model for titles and a caption, then validate everything.
 
@@ -546,22 +597,48 @@ async def generate(
     hashtags = payload.get("hashtags") or []
     if not isinstance(hashtags, list):
         hashtags = str(hashtags).split()
-    caption = build_caption(
-        str(payload.get("caption") or ""),
-        [str(h) for h in hashtags],
-        title=chosen[0].text,
-        clip_text=clip_text,
-        topic=topic,
-        handle=handle,
-        fixed_hashtags=fixed_hashtags,
-        facts=facts,
-    )
+    if caption_lines is not None:
+        # Campaign format: hook line, question line, then the campaign's tags.
+        caption = build_lines_caption(
+            str(payload.get("caption") or ""),
+            title=chosen[0].text,
+            clip_text=clip_text,
+            lines=caption_lines,
+            hook_fallback=hook_fallback,
+            facts=facts,
+        )
+    else:
+        caption = build_caption(
+            str(payload.get("caption") or ""),
+            [str(h) for h in hashtags],
+            title=chosen[0].text,
+            clip_text=clip_text,
+            topic=topic,
+            handle=handle,
+            fixed_hashtags=fixed_hashtags,
+            facts=facts,
+        )
     return HookCopy(
         title=chosen[0].text,
         alternatives=[o.text for o in chosen[1:]],
         caption=caption,
         rejected=rejected,
     )
+
+
+def _answer_opening(transcript: Transcript, clip, max_words: int = 16) -> str:
+    """The first sentence after the clip's opening question, verbatim."""
+    question = getattr(clip, "question_text", "")
+    if not question:
+        return ""
+    first = clip.start_word + len(question.split())
+    words: list[str] = []
+    for word in transcript.words[first : clip.end_word + 1]:
+        words.append(word.text)
+        if word.ends_sentence or len(words) >= max_words:
+            break
+    text = " ".join(words).strip()
+    return text if len(words) >= 3 else ""
 
 
 async def generate_for_clips(
@@ -575,6 +652,7 @@ async def generate_for_clips(
     trace_dir: Path | None = None,
     on_progress=None,
     concurrency: int = 3,
+    caption_lines: list[str] | None = None,
 ) -> None:
     """Fill ``hook_title``, ``hook_title_alts`` and ``post_caption`` on each clip.
 
@@ -600,6 +678,8 @@ async def generate_for_clips(
                 facts=facts,
                 handle=handle,
                 fixed_hashtags=fixed_hashtags,
+                caption_lines=caption_lines,
+                hook_fallback=_answer_opening(transcript, clip),
             )
         if not clip.hook_title:
             clip.hook_title = copy.title
