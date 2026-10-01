@@ -17,6 +17,9 @@ being validated against a fixed golden video set — see
 - **Four LLM providers** behind one interface: Anthropic, OpenAI-compatible (any
   `base_url`, covering OpenRouter, Groq, DeepSeek, LM Studio), Google Gemini, and
   Ollama. Malformed responses are retried once with the validation error attached.
+- **DeepSeek provider** — the Anthropic adapter pointed at DeepSeek's
+  Anthropic-compatible API (`deepseek-flash`), with its own `deepseek` secret.
+  Anthropic stays the default.
 - **Reframing** with shot detection, MediaPipe face tracking, active-speaker
   selection from mouth movement correlated against diarization, and a
   One Euro Filter with dead zone and velocity clamp. Shots are framed as TRACK,

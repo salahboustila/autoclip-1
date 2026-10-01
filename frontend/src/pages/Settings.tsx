@@ -7,6 +7,7 @@ const SECRET_LABELS: Record<string, string> = {
   anthropic: 'Anthropic API key',
   openai: 'OpenAI-compatible API key',
   gemini: 'Google Gemini API key',
+  deepseek: 'DeepSeek API key',
   huggingface_token: 'HuggingFace token',
 }
 

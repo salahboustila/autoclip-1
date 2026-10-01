@@ -1,8 +1,9 @@
 """LLM providers for highlight detection.
 
-Four adapters behind one interface. ``openai`` is the widest of them: because
+Five adapters behind one interface. ``openai`` is the widest of them: because
 its base URL is configurable, it also serves OpenRouter, Groq, DeepSeek,
-Together, and any local OpenAI-compatible server.
+Together, and any local OpenAI-compatible server. ``deepseek`` is the
+Anthropic adapter pointed at DeepSeek's Anthropic-compatible API.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from .base import (
     ProviderStatus,
     TranscriptWindow,
 )
+from .deepseek_provider import DeepSeekProvider
 from .gemini_provider import GeminiProvider
 from .ollama_provider import OllamaProvider
 from .openai_provider import OpenAIProvider
@@ -27,6 +29,7 @@ __all__ = [
     "AnthropicProvider",
     "ClipCandidate",
     "ClipCandidates",
+    "DeepSeekProvider",
     "DetectionConfig",
     "GeminiProvider",
     "LLMProvider",
@@ -45,6 +48,7 @@ PROVIDERS: dict[str, type[LLMProvider]] = {
     "openai": OpenAIProvider,
     "gemini": GeminiProvider,
     "ollama": OllamaProvider,
+    "deepseek": DeepSeekProvider,
 }
 
 

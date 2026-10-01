@@ -34,10 +34,10 @@ KEYRING_SERVICE = "autoclip"
 #: stored under the old name aren't silently lost; writes always use the new one.
 LEGACY_KEYRING_SERVICE = "clipforge"
 
-ProviderName = Literal["anthropic", "openai", "gemini", "ollama"]
+ProviderName = Literal["anthropic", "openai", "gemini", "ollama", "deepseek"]
 
 #: Providers that authenticate with an API key. Ollama runs locally and needs none.
-KEYED_PROVIDERS: tuple[str, ...] = ("anthropic", "openai", "gemini")
+KEYED_PROVIDERS: tuple[str, ...] = ("anthropic", "openai", "gemini", "deepseek")
 
 #: Extra secrets that aren't tied to a provider.
 HF_TOKEN_KEY = "huggingface_token"

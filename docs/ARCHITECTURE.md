@@ -148,9 +148,11 @@ silently diverges their schema from a fresh install's.
 
 ## Provider abstraction
 
-`providers/base.py` defines one Protocol. Four adapters implement it; the
+`providers/base.py` defines one Protocol. Five adapters implement it; the
 OpenAI-compatible one is the widest, because a configurable `base_url` also
-covers OpenRouter, Groq, DeepSeek, Together, and any local server.
+covers OpenRouter, Groq, DeepSeek, Together, and any local server. The DeepSeek
+adapter is the Anthropic one with a different endpoint, model, and key, since
+DeepSeek also serves the Anthropic Messages API.
 
 The retry-with-feedback loop lives in the base class: a schema violation is
 retried once with the validation error appended to the prompt. Small local

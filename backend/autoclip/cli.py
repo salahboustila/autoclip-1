@@ -274,7 +274,7 @@ def doctor() -> None:
     ):
         remediation.append(
             "No LLM provider is usable yet. Add an API key with "
-            "[cyan]autoclip config set-secret anthropic[/cyan] (or openai / gemini), "
+            "[cyan]autoclip config set-secret anthropic[/cyan] (or openai / gemini / deepseek), "
             "or install Ollama for a fully local setup."
         )
 
@@ -357,7 +357,7 @@ def config_path_cmd() -> None:
 def config_set_secret(
     key: str = typer.Argument(
         ...,
-        help="Provider name (anthropic, openai, gemini) or 'huggingface_token'.",
+        help="Provider name (anthropic, openai, gemini, deepseek) or 'huggingface_token'.",
     ),
 ) -> None:
     """Store an API key or token. The value is prompted for, never passed as an argument.

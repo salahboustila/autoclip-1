@@ -246,10 +246,10 @@ class TestScoreRule:
 
 
 class TestRegistry:
-    def test_all_four_providers_are_registered(self) -> None:
+    def test_all_five_providers_are_registered(self) -> None:
         from autoclip.providers import PROVIDERS
 
-        assert set(PROVIDERS) == {"anthropic", "openai", "gemini", "ollama"}
+        assert set(PROVIDERS) == {"anthropic", "openai", "gemini", "ollama", "deepseek"}
 
     def test_ollama_needs_no_key(self) -> None:
         from autoclip.providers import OllamaProvider

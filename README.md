@@ -19,7 +19,7 @@ Existing open-source clippers stop at "works on my machine" — no UI, janky ref
 Two ways to run it:
 
 - **Fully local** — Whisper + Ollama. Nothing leaves your machine, no API costs.
-- **Bring your own key** — Anthropic, OpenAI, Gemini, or any OpenAI-compatible endpoint (OpenRouter, Groq, DeepSeek, LM Studio) for better clip selection.
+- **Bring your own key** — Anthropic, DeepSeek, OpenAI, Gemini, or any OpenAI-compatible endpoint (OpenRouter, Groq, LM Studio) for better clip selection.
 
 Only transcript *text* is ever sent to a provider — never video or audio. With Ollama, nothing is sent at all.
 
@@ -95,6 +95,8 @@ Clip selection needs a language model. Either paste a key in **Settings → Keys
 ```bash
 autoclip config set-secret anthropic
 ```
+
+For DeepSeek, run `autoclip config set-secret deepseek` and pick **deepseek** in Settings. It talks to DeepSeek's Anthropic-compatible API (`deepseek-flash` by default).
 
 Keys go into your OS keyring — Credential Manager, Keychain, or Secret Service — never into a config file. If no keyring backend exists, AutoClip falls back to a file **and says so**, in the UI and in `doctor`.
 
