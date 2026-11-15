@@ -24,7 +24,7 @@ Top 5 first, then the rest. When the queue is empty, research new problems.
 17. Night period leaks (#1) - check regulated-claim limits first
 
 ## Reports sent
-(none yet)
+- 2026-11-15: Hijab pins hurt/lose/damage scarf, fixes overpriced (queue #1) -> daily_reports/2026-11-15.md
 
 ## Known access limits
 - Reddit answers 403 to this cloud server. Amazon blocks it with a bot check. Do not try mirrors, archives or bot-check workarounds. Use web search, TikTok/Instagram via vidIQ, and AliExpress/other open pages.
