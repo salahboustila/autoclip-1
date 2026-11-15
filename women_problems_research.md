@@ -2,9 +2,63 @@
 
 Date: 2026-11-15. Research only. No final product picked.
 
+**Two parts.** Section 0 is the newer, stronger part: real TikTok and Instagram data, mostly Moroccan and Maghreb. Sections 1 to 5 are the first pass from web search. Where they disagree, **trust Section 0.**
+
+---
+
+## 0. UPDATE: TikTok and Instagram evidence (Moroccan / Maghreb)
+
+### How I got this data
+- Agent-Reach is installed in the cloud, but this server can only reach YouTube search. Reddit, TikTok, Instagram and Amazon are blocked, and YouTube comments hit a bot check. So Agent-Reach alone could not do the job.
+- I used your **vidIQ connector** instead. It reads TikTok and Instagram from its own servers.
+- Spent **65 of your 100 vidIQ credits**: 6 searches for breakout videos, 7 comment pulls. 35 credits left.
+
+### What this data can and cannot tell you
+- The videos are "outliers": picked because they did far better than the creator's normal posts. Views show **interest**, not buyers.
+- Comment samples are tiny: 11 to 20 top-level comments per video, in TikTok's default order.
+- I could not read Instagram comments. Only TikTok comments are available.
+- I translated the Arabic, Darija and Algerian comments myself. Quotes are short and approximate.
+- Still no Moroccan source on "low competition". That stays unverified.
+
+### Findings by problem
+
+| Problem | What I found | Where |
+|---|---|---|
+| **Hijab pins hurt / slip (#9)** | TikTok "DO PINS KEEP HURTING YOUR NECK?" magnet demo: **2.5M views**, 160x the creator's normal. Comments are mostly buyers asking "price?", "where to buy?", "how to order?". One doubter: looks like it "will choke me", keeps safety pins. Instagram skit "can't find that one stupid pin": 1.3M views | [TikTok](https://www.tiktok.com/@abbaya.byalnisa/video/7683169378719878421), [IG](https://www.instagram.com/reel/DcYbC70NEEH) |
+| **Hijab grip is too expensive (#9)** | By Shahd's "Hijab Grip" (creator has 2M+ followers) got 1.4M IG views. On TikTok the top comment (**1.7K likes**) asks if girls "from simple means" can afford it. Another (128 likes): CAD 62 is too much. Another (120 likes): "a piece of silicone or plastic, price makes no sense". A Moroccan commenter: about **415 MAD** plus delivery, and even scarves are cheaper. Also: "I feel it cuts the scarf" (131 likes), and "I have hair loss, will it get stuck in hair?" (56 likes) | [TikTok](https://www.tiktok.com/@shahdzn/video/7678352668871380244), [IG](https://www.instagram.com/reel/DcgdAOWsXLQ) |
+| **Hijab or long top sticks to trousers when walking (#19, new)** | Maghreb creator video: 68.8K views, 60x her normal. Algerian-Arabic comments say hold-down garters ("masak") did nothing: "I tried the masak and it didn't work", "tried all ways, none worked". Tips from commenters: linen layer under, jeans, leather trousers, short jebba. Small sample | [TikTok](https://www.tiktok.com/@3ahd.wear/video/7679786077061664021) |
+| **Pin fear (#9)** | A Moroccan creator's story about swallowing a hijab pin at an airport: **5.6M IG views**, 668K on TikTok. Real fear in this audience. Do not copy or reuse her story in ads | [IG](https://www.instagram.com/reel/DefRwVER0w6), [TikTok](https://www.tiktok.com/@nelly.oum/video/7697756678174919952) |
+| **Heel comfort (#6)** | Moroccan creator (Darija) shows folding a napkin inside heeled boots: **2.6M views** | [IG](https://www.instagram.com/reel/DfFXKXhN_GW) |
+| **Trousers don't fit (#4)** | Moroccan creator rants that nothing fits and shows a hair-clip waist fix: 778K views | [IG](https://www.instagram.com/reel/DcYeeOrMZjy) |
+| **Period items, discreet carrying (#2)** | Arab mother shows a school "period kit" bag: 984K views. A pad-pouch reel from India: 1.5M. Both are on the same problem as the surveys in Section 1 | [IG kit](https://www.instagram.com/reel/Dd4onm0t8AP), [IG pouch](https://www.instagram.com/reel/Db7FctkTUQz) |
+| **Period products already sold in Morocco** | A Moroccan brand's period underwear review (Casablanca/Rabat tags): 828K views. So that category has a local seller already. Heating belts for cramps also get big views, but they are device or health claims, so I skipped them | [IG](https://www.instagram.com/reel/DdZYXiCsXLZ) |
+| **Pad stays in place hack** | 2.3M TikTok views. Comments are jokes and "I pray it comes before school". No clear product gap | [TikTok](https://www.tiktok.com/@ritaaoun92/video/7683937551903624455) |
+| **Phone and essentials without a bag (#5, #13)** | Crossbody phone-wallet case: 1.1M IG views ("I don't need a purse anymore"). "Going out with just my phone": 939K TikTok views. "What fits in a tiny bag": 1.8M. "No bag tonight, clothes as pockets": 595K | [IG](https://www.instagram.com/reel/DfaNlT9qRe-), [TikTok](https://www.tiktok.com/@kerryaribeiro/video/7678818986800205069), [TikTok](https://www.tiktok.com/@maluukss0/video/7684750507390291218) |
+| **Curly hair overnight (#8)** | Moroccan bonnet-and-scarf overnight wrap: 1.4M IG views. Algerian "sock for frizz" hack: 1.1M. US clip "love the bonnet but it doesn't actually protect my hair": 1.1M. Comments on a curly-hair video: many women only just learned their hair is curly and are scared to brush it dry. No product complaint | [IG](https://www.instagram.com/reel/De1VwNAtz6K), [IG](https://www.instagram.com/reel/DY5KGqQImpQ), [TikTok](https://www.tiktok.com/@baileebear13/video/7685198256451620127) |
+| **Night and commute safety (#11)** | Moroccan creators on women's safety at night: 725K IG views, 720K TikTok views. But the comments were noise, so I found **no clear product need** | [IG](https://www.instagram.com/reel/DfPqP7rRqu3), [TikTok](https://www.tiktok.com/@anasbouraseng/video/7678056232199965972) |
+
+### What changed after this data
+- **Hijab stay-put / pin-free is now clearly #1.** Demand is huge (millions of views), buyers are asking where to buy, and the best-known product is called overpriced by women in Morocco. A cheap version has a visible gap.
+- **What commenters want from it:** cheap, does not cut or damage the scarf, safe with thin or falling hair, and no pin to swallow or lose.
+- **Safety dropped out of the top 5.** Plenty of interest, but no clear product ask in the comments, and legal and claim risk stays.
+- **Heel comfort moved up.** A Moroccan 2.6M-view video backs it.
+
+### Revised top 5 (replaces Section 3)
+1. **Hijab stay-put and pin-free (#9).** Big demand, a named overpriced competitor, and a Moroccan price complaint with numbers. Open question: how many competitors already sell magnets and grips in Morocco, and at what price?
+2. **Heel comfort / heel slipping (#6).** Moroccan 2.6M-view hack, plus podiatry sources on why heels slip. Easy to demo. Small, cheap items.
+3. **Discreet pouch for period items (#2).** Surveys plus a 984K-view Arab mother's kit video. Keep claims to "discreet", nothing medical. Open question: a Moroccan brand already sells period underwear, so check pouches too.
+4. **Phone and essentials without a bag (#5 / #13).** Phone-wallet and mini-bag videos hit 1M+ views in Arabic and English. Open question: how many sell this already?
+5. **Hijab or long top sticking to trousers (#19).** Real complaint, and women say the common fix failed. Needs more research before you commit. I have one video's comments only.
+
+**Runners-up:** curly hair overnight (#8, lots of views, no clear product complaint), night safety (#11).
+
+---
+
+## Sections 1 to 5: first pass from web search (kept for reference)
+
 ## Read this first: limits of this research
 
-- **Reddit, TikTok, Instagram and Amazon could not be opened directly.** Reddit and most other sites are blocked in this session. I only saw search results.
+- **Sections 1 to 5 only:** Reddit, TikTok, Instagram and Amazon could not be opened directly. Reddit and most other sites are blocked in this session. I only saw search results. (TikTok and Instagram were added later, in Section 0.)
 - Because of that, **most evidence is from brand blogs, retailer guides, news and a few surveys**, not raw user complaints. Brand blogs want to sell something. I mark this in the "Evidence" column.
 - **Moroccan evidence is thin.** I found Moroccan press only for transport harassment and bag snatching, plus general e-commerce stats. For every other problem, I have no Moroccan source. Treat them as "likely, not confirmed".
 - Surveys are mostly UK/US.
@@ -74,7 +128,7 @@ Note on #1: absorbent pads and period underwear can run into hygiene or health c
 
 ---
 
-## 3. Top 5 shortlist
+## 3. Top 5 shortlist (first version, replaced by the revised top 5 in Section 0)
 
 1. **Hijab slipping and pin damage (#9).** Used every day, and the fix is small and light. Easy to shoot a before/after clip. Caveat: magnets already exist, and I don't know what share of your 18-30 buyers wear hijab.
 2. **Discreet carrying for period items (#2).** The best-backed problem here: several surveys on embarrassment. Cheap, tiny and easy to ship. Caveat: surveys are UK/US, so check how Moroccan women feel. Keep claims to "discreet", nothing medical.
@@ -125,7 +179,7 @@ Note on #1: absorbent pads and period underwear can run into hygiene or health c
 - Bands: [Bustle](https://www.bustle.com/p/the-4-best-resistance-bands-that-dont-roll-up-22630457), [Woman & Home](https://www.womanandhome.com/health-wellbeing/how-to-do-resistance-band-exercises)
 - Travel: [Oyster](https://www.oyster.com/articles/best-way-to-pack-travel-toiletries-without-making-a-mess/), [Points Guy](https://thepointsguy.com/travel-gear/keep-toiletries-from-leaking/), [jewelry case review](https://benable.com/amarajuliette/i-finally-found-a-jewelry-travel-case-that-stops-necklaces-from-tangling)
 
-**Not covered (could not access):** Reddit directly (r/TwoXChromosomes, r/SkincareAddiction, r/femalefashionadvice, r/PeriodCare), TikTok and Instagram comments, Amazon and AliExpress 1-3 star reviews, Moroccan forums. Skin care and cosmetics were skipped on purpose (regulated).
+**Not covered (could not access):** Reddit directly (r/TwoXChromosomes, r/SkincareAddiction, r/femalefashionadvice, r/PeriodCare), Instagram comments, Amazon and AliExpress 1-3 star reviews, Moroccan forums. TikTok comments and TikTok/Instagram video data are covered in Section 0, but only a small sample. Skin care and cosmetics were skipped on purpose (regulated).
 
 ---
 
@@ -134,5 +188,5 @@ Note on #1: absorbent pads and period underwear can run into hygiene or health c
 1. **What is your target landed cost and selling price in MAD?** (Cost on 1688 + shipping + customs, and the price women will pay with COD.) This cuts out many ideas fast.
 2. **Do you want to sell to hijab wearers, or to all women 18-30?** This decides if #9 is a winner or too narrow.
 3. **Are you OK with period-related and safety-related products?** Both carry extra risk: claim rules, import rules for alarms and sprays, and sensitive ads on Meta/TikTok.
-4. **How will you check competition?** Suggested: search Facebook Ad Library, TikTok, Instagram, Jumia and Avito for each shortlisted problem. Who does it, and what counts as "too crowded"?
+4. **How will you check competition?** Suggested: search Facebook Ad Library, TikTok, Instagram, Jumia and Avito for each shortlisted problem. Who does it, and what counts as "too crowded"? For the hijab idea, the question is sharper: what do magnets and grips already sell for in Morocco, and could you sell clearly under 415 MAD?
 5. **What can you handle on size, returns and shipping time?** Clothing has size returns, and COD makes that costly. Small items like pouches or grips avoid this. Also, are you fine waiting 3-6 weeks for shipping, or do you need a faster supplier?
