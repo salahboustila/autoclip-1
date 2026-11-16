@@ -25,6 +25,7 @@ Top 5 first, then the rest. When the queue is empty, research new problems.
 
 ## Reports sent
 - 2026-11-15: Hijab pins hurt/lose/damage scarf, fixes overpriced (queue #1) -> daily_reports/2026-11-15.md
+- 2026-11-16: Heels/shoes slip and rub heel; heel grips fall off or leave residue (queue #2) -> daily_reports/2026-11-16.md
 
 ## Known access limits
 - Reddit answers 403 to this cloud server. Amazon blocks it with a bot check. Do not try mirrors, archives or bot-check workarounds. Use web search, TikTok/Instagram via vidIQ, and AliExpress/other open pages.
