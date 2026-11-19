@@ -28,6 +28,7 @@ Top 5 first, then the rest. When the queue is empty, research new problems.
 - 2026-11-16: Heels/shoes slip and rub heel; heel grips fall off or leave residue (queue #2) -> daily_reports/2026-11-16.md
 - 2026-11-17: Shame around periods, no discreet way to carry period items (queue #3) -> daily_reports/2026-11-17.md
 - 2026-11-18: No usable pockets; phone crossbody bags have short straps and small pockets (queue #4) -> daily_reports/2026-11-18.md
+- 2026-11-19: Hijab/long top clings to trousers, usual fixes fail (queue #5) -> daily_reports/2026-11-19.md
 
 ## Known access limits
 - Reddit answers 403 to this cloud server. Amazon blocks it with a bot check. Do not try mirrors, archives or bot-check workarounds. Use web search, TikTok/Instagram via vidIQ, and AliExpress/other open pages.
