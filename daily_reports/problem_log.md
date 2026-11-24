@@ -33,7 +33,8 @@ Top 5 first, then the rest. When the queue is empty, research new problems.
 - 2026-11-21: Unsafe at night / on transport; safety devices legally unclear or poorly rated (queue #7) -> daily_reports/2026-11-21.md
 - 2026-11-22: Thigh rubbing under skirts/dresses in heat; shorts too hot, bands slip (queue #8) -> daily_reports/2026-11-22.md
 - 2026-11-23: Trousers/leggings don't fit at waist (too big, roll); cheap adjusters already on Jumia (queue #9) -> daily_reports/2026-11-23.md
+- 2026-11-24: Bra straps slip or dig in; cause is mostly fit, clips already on Jumia (queue #10) -> daily_reports/2026-11-24.md
 
 ## Known access limits
 - Reddit answers 403 to this cloud server. Amazon blocks it with a bot check. Do not try mirrors, archives or bot-check workarounds. Use web search, TikTok/Instagram via vidIQ, and AliExpress/other open pages.
-- vidIQ credits: 5 per call, 100 plan credits that renew monthly. Check balance first; use at most 2 calls per day and skip vidIQ if under 15 credits.
+- vidIQ credits: 5 per call, plan credits renew monthly (150 as of 2026-11-23, next reset 2026-12-23). Check balance first; use at most 2 calls per day (aim for about 1 on average) and skip vidIQ if under 15 credits. The comment tool is now mcp__vidIQ__vidiq_tiktok_comment_list (param postUrl).
