@@ -37,6 +37,7 @@ Top 5 first, then the rest. When the queue is empty, research new problems.
 - 2026-11-25: Hair ties dent/snag, cheap claw clips break or slip on thick hair (queue #11) -> daily_reports/2026-11-25.md
 - 2026-11-26: Sleep masks let light in at nose, low trust in cheap Jumia sellers (queue #12) -> daily_reports/2026-11-26.md
 - 2026-11-27: Narrow bag straps dig in when heavy (queue #13), weakest evidence so far -> daily_reports/2026-11-27.md
+- 2026-11-28: Home workouts use improvised gear; cheap resistance bands smell, roll, snap (queue #14) -> daily_reports/2026-11-28.md
 
 ## Known access limits
 - Reddit answers 403 to this cloud server. Amazon blocks it with a bot check. Do not try mirrors, archives or bot-check workarounds. Use web search, TikTok/Instagram via vidIQ, and AliExpress/other open pages.
